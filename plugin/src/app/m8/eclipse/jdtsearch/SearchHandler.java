@@ -15,6 +15,7 @@ import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMember;
 import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.core.ISourceRange;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.ITypeHierarchy;
@@ -133,12 +134,30 @@ class SearchHandler {
                 new SearchRequestor() {
                     @Override
                     public void acceptSearchMatch(SearchMatch match) {
-                        String file = match.getResource() != null
-                                ? match.getResource().getFullPath().toString()
-                                : "?";
+                        if (match.getAccuracy() != SearchMatch.A_ACCURATE) return;
+                        if (match.isInsideDocComment()) return;
+
+                        String file = getMatchFile(match);
                         int line = getLine(match);
-                        results.add("{\"file\":\"" + HttpServer.escapeJson(file)
-                                + "\",\"line\":" + line + "}");
+                        String enclosing = getEnclosingName(match);
+                        String content = getLineContent(match);
+
+                        String project = getMatchProject(match);
+
+                        StringBuilder entry = new StringBuilder();
+                        entry.append("{\"file\":\"").append(HttpServer.escapeJson(file))
+                                .append("\",\"line\":").append(line);
+                        if (project != null) {
+                            entry.append(",\"project\":\"").append(HttpServer.escapeJson(project)).append("\"");
+                        }
+                        if (enclosing != null) {
+                            entry.append(",\"in\":\"").append(HttpServer.escapeJson(enclosing)).append("\"");
+                        }
+                        if (content != null) {
+                            entry.append(",\"content\":\"").append(HttpServer.escapeJson(content)).append("\"");
+                        }
+                        entry.append("}");
+                        results.add(entry.toString());
                     }
                 },
                 null);
@@ -376,7 +395,7 @@ class SearchHandler {
         return sb.toString();
     }
 
-    // ---- /source?class=FQN&method=name ----
+    // ---- /source?class=FQN[&method=name] ----
 
     HttpServer.Response handleSource(Map<String, String> params) throws Exception {
         String fqn = params.get("class");
@@ -385,52 +404,77 @@ class SearchHandler {
         if (fqn == null || fqn.isBlank()) {
             return HttpServer.Response.json("{\"error\":\"Missing 'class' parameter\"}");
         }
-        if (methodName == null || methodName.isBlank()) {
-            return HttpServer.Response.json("{\"error\":\"Missing 'method' parameter\"}");
-        }
 
         IType type = findType(fqn);
         if (type == null) {
             return HttpServer.Response.json("{\"error\":\"Type not found: " + HttpServer.escapeJson(fqn) + "\"}");
         }
 
-        int arity = parseArity(params.get("arity"));
-        IMethod method = findMethod(type, methodName, arity);
-        if (method == null) {
-            return HttpServer.Response.json("{\"error\":\"Method not found: " + HttpServer.escapeJson(methodName)
-                    + " in " + HttpServer.escapeJson(fqn) + "\"}");
+        String file = getFilePath(type);
+        String fullSource = getFullSource(type);
+
+        if (methodName != null && !methodName.isBlank()) {
+            int arity = parseArity(params.get("arity"));
+            List<IMethod> methods = findMethods(type, methodName, arity);
+            if (methods.isEmpty()) {
+                return HttpServer.Response.json("{\"error\":\"Method not found: " + HttpServer.escapeJson(methodName)
+                        + " in " + HttpServer.escapeJson(fqn) + "\"}");
+            }
+
+            if (methods.size() == 1) {
+                return singleMemberResponse(methods.get(0), file, fullSource);
+            }
+
+            // Multiple overloads — each block prefixed with :startLine-endLine
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < methods.size(); i++) {
+                if (i > 0) sb.append("\n\n");
+                IMethod method = methods.get(i);
+                String source = method.getSource();
+                if (source == null) continue;
+                int[] lines = memberLines(method, fullSource);
+                sb.append(":").append(lines[0]).append("-").append(lines[1]).append("\n");
+                sb.append(source);
+            }
+            return HttpServer.Response.text(sb.toString(), Map.of(
+                    "X-File", file,
+                    "X-Start-Line", "-1",
+                    "X-End-Line", "-1"));
         }
 
-        String source = method.getSource();
+        // Full class source
+        return singleMemberResponse(type, file, fullSource);
+    }
+
+    private HttpServer.Response singleMemberResponse(IMember member, String file, String fullSource) throws Exception {
+        String source = member.getSource();
         if (source == null) {
             return HttpServer.Response.json("{\"error\":\"Source not available\"}");
         }
-
-        ISourceRange range = method.getSourceRange();
-        int startLine = -1;
-        int endLine = -1;
-        ICompilationUnit cu = method.getCompilationUnit();
-        if (cu != null) {
-            String fullSource = cu.getSource();
-            startLine = offsetToLine(fullSource, range.getOffset());
-            endLine = offsetToLine(fullSource, range.getOffset() + range.getLength());
-        } else {
-            IClassFile cf = method.getClassFile();
-            if (cf != null) {
-                String fullSource = cf.getSource();
-                if (fullSource != null) {
-                    startLine = offsetToLine(fullSource, range.getOffset());
-                    endLine = offsetToLine(fullSource, range.getOffset() + range.getLength());
-                }
-            }
-        }
-
-        String file = getFilePath(type);
-
+        int[] lines = memberLines(member, fullSource);
         return HttpServer.Response.text(source, Map.of(
                 "X-File", file,
-                "X-Start-Line", String.valueOf(startLine),
-                "X-End-Line", String.valueOf(endLine)));
+                "X-Start-Line", String.valueOf(lines[0]),
+                "X-End-Line", String.valueOf(lines[1])));
+    }
+
+    private int[] memberLines(IMember member, String fullSource) throws Exception {
+        ISourceRange range = member.getSourceRange();
+        if (fullSource != null && range != null && range.getOffset() >= 0) {
+            return new int[] {
+                    offsetToLine(fullSource, range.getOffset()),
+                    offsetToLine(fullSource, range.getOffset() + range.getLength())
+            };
+        }
+        return new int[] { -1, -1 };
+    }
+
+    private String getFullSource(IType type) throws Exception {
+        ICompilationUnit cu = type.getCompilationUnit();
+        if (cu != null) return cu.getSource();
+        IClassFile cf = type.getClassFile();
+        if (cf != null) return cf.getSource();
+        return null;
     }
 
     // ---- helpers ----
@@ -450,6 +494,18 @@ class SearchHandler {
             if (type != null && type.exists()) return type;
         }
         return null;
+    }
+
+    private List<IMethod> findMethods(IType type, String name, int arity) throws JavaModelException {
+        List<IMethod> result = new ArrayList<>();
+        for (IMethod m : type.getMethods()) {
+            if (m.getElementName().equals(name)) {
+                if (arity < 0 || m.getNumberOfParameters() == arity) {
+                    result.add(m);
+                }
+            }
+        }
+        return result;
     }
 
     private IMethod findMethod(IType type, String name, int arity) throws JavaModelException {
@@ -513,6 +569,90 @@ class SearchHandler {
             if (source.charAt(i) == '\n') line++;
         }
         return line;
+    }
+
+    private String getMatchProject(SearchMatch match) {
+        if (match.getElement() instanceof IMember member) {
+            IJavaProject jp = member.getJavaProject();
+            if (jp != null) return jp.getElementName();
+        }
+        return null;
+    }
+
+    private String getEnclosingName(SearchMatch match) {
+        Object element = match.getElement();
+        if (element instanceof IMember member) {
+            IType declaringType = member.getDeclaringType();
+            String typeFqn = declaringType != null
+                    ? declaringType.getFullyQualifiedName()
+                    : (member instanceof IType t
+                            ? t.getFullyQualifiedName()
+                            : member.getElementName());
+            if (member instanceof IMethod m) {
+                try {
+                    return typeFqn + "." + compactSignature(m);
+                } catch (JavaModelException e) {
+                    return typeFqn + "." + m.getElementName() + "()";
+                }
+            }
+            if (member instanceof IField f) {
+                return typeFqn + "." + f.getElementName();
+            }
+            if (member instanceof IType t) {
+                return t.getFullyQualifiedName();
+            }
+        }
+        return null;
+    }
+
+    private String compactSignature(IMethod m) throws JavaModelException {
+        StringBuilder sig = new StringBuilder();
+        sig.append(m.getElementName()).append("(");
+        String[] paramTypes = m.getParameterTypes();
+        for (int i = 0; i < paramTypes.length; i++) {
+            if (i > 0) sig.append(", ");
+            sig.append(Signature.toString(paramTypes[i]));
+        }
+        sig.append(")");
+        return sig.toString();
+    }
+
+    private String getMatchFile(SearchMatch match) {
+        // Binary type — resolve jar path from classpath
+        if (match.getElement() instanceof IMember member && member.isBinary()) {
+            try {
+                IPackageFragmentRoot root = (IPackageFragmentRoot)
+                        member.getAncestor(IJavaElement.PACKAGE_FRAGMENT_ROOT);
+                if (root != null && root.getPath() != null) {
+                    return root.getPath().toOSString();
+                }
+            } catch (Exception e) { /* ignore */ }
+        }
+        if (match.getResource() != null) {
+            return match.getResource().getFullPath().toString();
+        }
+        return "?";
+    }
+
+    private String getLineContent(SearchMatch match) {
+        try {
+            String source = null;
+            if (match.getResource() instanceof IFile file) {
+                ICompilationUnit cu = JavaCore.createCompilationUnitFrom(file);
+                source = cu.getSource();
+            } else if (match.getElement() instanceof IMember member) {
+                IClassFile cf = member.getClassFile();
+                if (cf != null) source = cf.getSource();
+            }
+            if (source != null) {
+                int offset = match.getOffset();
+                int lineStart = source.lastIndexOf('\n', offset - 1) + 1;
+                int lineEnd = source.indexOf('\n', offset);
+                if (lineEnd < 0) lineEnd = source.length();
+                return source.substring(lineStart, lineEnd).trim();
+            }
+        } catch (Exception e) { /* ignore */ }
+        return null;
     }
 
     private int getLine(SearchMatch match) {

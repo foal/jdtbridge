@@ -19,6 +19,9 @@ import org.eclipse.jdt.core.ToolFactory;
 import org.eclipse.jdt.core.formatter.CodeFormatter;
 import org.eclipse.jdt.core.manipulation.OrganizeImportsOperation;
 import org.eclipse.jdt.core.refactoring.IJavaRefactorings;
+import org.eclipse.jdt.core.IPackageFragment;
+import org.eclipse.jdt.core.IPackageFragmentRoot;
+import org.eclipse.jdt.core.refactoring.descriptors.MoveDescriptor;
 import org.eclipse.jdt.core.refactoring.descriptors.RenameJavaElementDescriptor;
 import org.eclipse.jdt.core.search.TypeNameMatch;
 import org.eclipse.jface.text.Document;
@@ -201,6 +204,79 @@ class RefactoringHandler {
         descriptor.setJavaElement(element);
         descriptor.setNewName(newName);
         descriptor.setUpdateReferences(true);
+
+        RefactoringStatus status = new RefactoringStatus();
+        Refactoring refactoring = descriptor.createRefactoring(status);
+        if (status.hasFatalError()) {
+            return "{\"error\":\""
+                    + HttpServer.escapeJson(status.getMessageMatchingSeverity(
+                            RefactoringStatus.FATAL)) + "\"}";
+        }
+
+        status.merge(refactoring.checkInitialConditions(
+                new NullProgressMonitor()));
+        if (status.hasFatalError()) {
+            return "{\"error\":\""
+                    + HttpServer.escapeJson(status.getMessageMatchingSeverity(
+                            RefactoringStatus.FATAL)) + "\"}";
+        }
+
+        status.merge(refactoring.checkFinalConditions(
+                new NullProgressMonitor()));
+        if (status.hasFatalError()) {
+            return "{\"error\":\""
+                    + HttpServer.escapeJson(status.getMessageMatchingSeverity(
+                            RefactoringStatus.FATAL)) + "\"}";
+        }
+
+        Change change = refactoring.createChange(new NullProgressMonitor());
+        change.perform(new NullProgressMonitor());
+
+        return "{\"ok\":true}";
+    }
+
+    // ---- /move ----
+
+    String handleMove(Map<String, String> params) throws Exception {
+        String fqn = params.get("class");
+        String targetPkg = params.get("target");
+
+        if (fqn == null || fqn.isBlank()) {
+            return "{\"error\":\"Missing 'class' parameter\"}";
+        }
+        if (targetPkg == null || targetPkg.isBlank()) {
+            return "{\"error\":\"Missing 'target' parameter\"}";
+        }
+
+        IType type = findType(fqn);
+        if (type == null) {
+            return "{\"error\":\"Type not found: "
+                    + HttpServer.escapeJson(fqn) + "\"}";
+        }
+
+        ICompilationUnit cu = type.getCompilationUnit();
+        if (cu == null) {
+            return "{\"error\":\"Cannot move binary type\"}";
+        }
+
+        // Find or create target package in the same source folder
+        IPackageFragmentRoot sourceRoot = (IPackageFragmentRoot)
+                cu.getAncestor(IJavaElement.PACKAGE_FRAGMENT_ROOT);
+        IPackageFragment dest = sourceRoot.getPackageFragment(targetPkg);
+        if (!dest.exists()) {
+            dest = sourceRoot.createPackageFragment(
+                    targetPkg, true, new NullProgressMonitor());
+        }
+
+        MoveDescriptor descriptor = (MoveDescriptor)
+                RefactoringCore.getRefactoringContribution(
+                        IJavaRefactorings.MOVE).createDescriptor();
+        descriptor.setMoveResources(
+                new IFile[0], new org.eclipse.core.resources.IFolder[0],
+                new ICompilationUnit[] { cu });
+        descriptor.setDestination(dest);
+        descriptor.setUpdateReferences(true);
+        descriptor.setUpdateQualifiedNames(true);
 
         RefactoringStatus status = new RefactoringStatus();
         Refactoring refactoring = descriptor.createRefactoring(status);

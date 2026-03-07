@@ -131,6 +131,7 @@ public class HttpServer {
                         refactoring.handleOrganizeImports(params));
                 case "/format" -> Response.json(refactoring.handleFormat(params));
                 case "/rename" -> Response.json(refactoring.handleRename(params));
+                case "/move" -> Response.json(refactoring.handleMove(params));
                 case "/active-editor" -> Response.json(
                         editor.handleActiveEditor(params));
                 case "/open" -> Response.json(editor.handleOpen(params));
