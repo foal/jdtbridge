@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feature
+      id="app.m8.eclipse.jdtsearch.feature"
+      label="JDT Search HTTP Bridge"
+      version="1.0.0.qualifier"
+      provider-name="m8">
+
+   <description>
+      Exposes Eclipse JDT SearchEngine, refactoring, diagnostics, and test runner
+      over HTTP for use by AI coding assistants and CLI tools.
+   </description>
+
+   <plugin
+         id="app.m8.eclipse.jdtsearch"
+         download-size="0"
+         install-size="0"
+         version="0.0.0"
+         unpack="false"/>
+
+</feature>

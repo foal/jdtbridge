@@ -1,0 +1,8 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: JDT Search HTTP Server Tests
+Bundle-SymbolicName: app.m8.eclipse.jdtsearch.tests
+Bundle-Version: 1.0.0.qualifier
+Fragment-Host: app.m8.eclipse.jdtsearch
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Require-Bundle: org.junit;bundle-version="4.13"

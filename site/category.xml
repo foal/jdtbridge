@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<site>
+   <feature id="app.m8.eclipse.jdtsearch.feature" version="0.0.0">
+      <category name="jdt-bridge"/>
+   </feature>
+
+   <category-def name="jdt-bridge" label="JDT Search HTTP Bridge">
+      <description>
+         Eclipse JDT HTTP bridge for AI coding assistants.
+      </description>
+   </category-def>
+</site>
