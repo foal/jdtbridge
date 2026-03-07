@@ -18,12 +18,10 @@ export function connect(workspaceHint) {
   if (!_instance) {
     console.error(
       bold(red("Eclipse JDT Bridge not running.")) +
-        "\n\nNo live instances found in JDTBRIDGE_HOME/instances/.\n" +
-        "Make sure Eclipse is running with the jdtbridge plugin installed.\n\n" +
-        "Maven fallbacks:\n" +
-        "  compile:    node .claude/scripts/compile.mjs <module>\n" +
-        "  checkstyle: node .claude/scripts/checkstyle.mjs <module>\n" +
-        "  test:       node .claude/scripts/test.mjs <module>",
+        "\n\nNo live instances found. Check that:" +
+        "\n  1. Eclipse is running" +
+        "\n  2. The jdtbridge plugin is installed (io.github.kaluchi.jdtbridge)" +
+        "\n  3. Instance files exist in ~/.jdtbridge/instances/",
     );
     process.exit(1);
   }
