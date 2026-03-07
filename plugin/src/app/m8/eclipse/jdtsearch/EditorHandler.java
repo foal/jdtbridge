@@ -3,7 +3,6 @@ package app.m8.eclipse.jdtsearch;
 import java.util.Map;
 
 import org.eclipse.core.resources.ResourcesPlugin;
-import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMethod;

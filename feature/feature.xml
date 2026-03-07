@@ -8,7 +8,35 @@
    <description>
       Exposes Eclipse JDT SearchEngine, refactoring, diagnostics, and test runner
       over HTTP for use by AI coding assistants and CLI tools.
+
+      Starts an HTTP server on a random port at Eclipse startup.
+      Connection details are written to ~/.jdt-bridge (port, auth token, PID, workspace).
    </description>
+
+   <copyright>
+      Copyright (c) 2026 m8. All rights reserved.
+   </copyright>
+
+   <license url="https://www.apache.org/licenses/LICENSE-2.0">
+      Apache License, Version 2.0
+   </license>
+
+   <url>
+      <discovery label="JDT Search HTTP Bridge" url="https://github.com/nicholasgasior/eclipse-jdt-search"/>
+   </url>
+
+   <requires>
+      <import plugin="org.eclipse.core.runtime"/>
+      <import plugin="org.eclipse.core.resources"/>
+      <import plugin="org.eclipse.jdt.core"/>
+      <import plugin="org.eclipse.jdt.ui"/>
+      <import plugin="org.eclipse.jdt.junit.core"/>
+      <import plugin="org.eclipse.jdt.launching"/>
+      <import plugin="org.eclipse.debug.core"/>
+      <import plugin="org.eclipse.ltk.core.refactoring"/>
+      <import plugin="org.eclipse.ui"/>
+      <import plugin="org.eclipse.ui.ide"/>
+   </requires>
 
    <plugin
          id="app.m8.eclipse.jdtsearch"

@@ -17,7 +17,6 @@ import java.util.Map;
  */
 public class HttpServer {
 
-    private final int port;
     private final SearchHandler search = new SearchHandler();
     private final DiagnosticsHandler diagnostics = new DiagnosticsHandler();
     private final RefactoringHandler refactoring = new RefactoringHandler();
@@ -26,6 +25,7 @@ public class HttpServer {
     private final ProjectHandler projectInfo = new ProjectHandler();
     private volatile ServerSocket serverSocket;
     private volatile boolean running;
+    private volatile String token;
 
     /** Response with content type, optional headers, and body. */
     record Response(String contentType, Map<String, String> headers, String body) {
@@ -38,16 +38,21 @@ public class HttpServer {
         }
     }
 
-    public HttpServer(int port) {
-        this.port = port;
-    }
-
     public void start() throws IOException {
-        serverSocket = new ServerSocket(port);
+        serverSocket = new ServerSocket(0);
         running = true;
         Thread t = new Thread(this::acceptLoop, "jdt-search-http");
         t.setDaemon(true);
         t.start();
+    }
+
+    /** Returns the actual port the server is listening on. */
+    public int getPort() {
+        return serverSocket != null ? serverSocket.getLocalPort() : -1;
+    }
+
+    public void setToken(String token) {
+        this.token = token;
     }
 
     public void stop() {
@@ -81,6 +86,27 @@ public class HttpServer {
 
             String[] parts = requestLine.split(" ");
             if (parts.length < 2) return;
+
+            // Read headers
+            String authHeader = null;
+            String line;
+            while ((line = reader.readLine()) != null
+                    && !line.isEmpty()) {
+                if (line.regionMatches(true, 0,
+                        "Authorization:", 0, 14)) {
+                    authHeader = line.substring(14).trim();
+                }
+            }
+
+            // Token auth check
+            if (token != null && !token.isEmpty()) {
+                String expected = "Bearer " + token;
+                if (authHeader == null
+                        || !authHeader.equals(expected)) {
+                    sendError(socket, 401, "Unauthorized");
+                    return;
+                }
+            }
 
             String fullPath = parts[1];
             String path;
@@ -164,6 +190,17 @@ public class HttpServer {
             }
         }
         return params;
+    }
+
+    private void sendError(Socket socket, int code, String message)
+            throws IOException {
+        String body = "{\"error\":\"" + escapeJson(message) + "\"}";
+        String resp = "HTTP/1.1 " + code + " " + message + "\r\n"
+                + "Content-Type: application/json; charset=utf-8\r\n"
+                + "Connection: close\r\n\r\n" + body;
+        OutputStream out = socket.getOutputStream();
+        out.write(resp.getBytes(StandardCharsets.UTF_8));
+        out.flush();
     }
 
     /** JSON string escaping — handles all control characters per RFC 8259. */

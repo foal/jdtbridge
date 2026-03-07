@@ -14,7 +14,6 @@ import org.eclipse.debug.core.ILaunchConfigurationType;
 import org.eclipse.debug.core.ILaunchConfigurationWorkingCopy;
 import org.eclipse.debug.core.ILaunchManager;
 import org.eclipse.debug.core.Launch;
-import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.IType;
@@ -207,7 +206,6 @@ class TestHandler {
                         TestResult tr = new TestResult();
                         tr.className = tc.getTestClassName();
                         tr.method = tc.getTestMethodName();
-                        tr.time = tc.getElapsedTimeInSeconds();
 
                         if (result == ITestElement.Result.OK) {
                             tr.status = "PASS";
@@ -278,7 +276,6 @@ class TestHandler {
         String className;
         String method;
         String status;
-        double time;
         String trace;
     }
 
