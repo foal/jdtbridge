@@ -40,7 +40,7 @@ Alternatively, delegate to an AI coding agent (e.g. Claude Code) — it can clon
 
 ### Target platform
 
-The file `eclipse-jdt-search.target` points to a local Eclipse directory (default `D:\eclipse`). If your Eclipse is installed elsewhere, update the `<location path="...">` in that file before running `jdt setup`.
+The file `jdtbridge.target` points to a local Eclipse directory (default `D:\eclipse`). If your Eclipse is installed elsewhere, update the `<location path="...">` in that file before running `jdt setup`.
 
 ### Updating
 
@@ -159,7 +159,7 @@ Open a type or method in the Eclipse editor.
 jdtbridge/
   pom.xml                              # Parent POM (Tycho reactor)
   LICENSE                              # Apache License 2.0
-  eclipse-jdt-search.target            # Target platform definition
+  jdtbridge.target            # Target platform definition
   plugin/
     pom.xml                            # Plugin module (eclipse-plugin packaging)
     META-INF/MANIFEST.MF               # OSGi manifest
