@@ -13,7 +13,7 @@
     <description>Eclipse plugin exposing JDT SearchEngine, refactoring,
         diagnostics, and test runner over HTTP for AI coding assistants
         and CLI tools.</description>
-    <url>https://github.com/nicholasgasior/eclipse-jdt-search</url>
+    <url>https://github.com/kaluchi/jdtbridge</url>
     <inceptionYear>2026</inceptionYear>
 
     <licenses>
@@ -27,14 +27,14 @@
         <developer>
             <id>kaluchi</id>
             <name>kaluchi</name>
-            <url>https://github.com/nicholasgasior</url>
+            <url>https://github.com/kaluchi</url>
         </developer>
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/nicholasgasior/eclipse-jdt-search.git</connection>
-        <developerConnection>scm:git:git@github.com:nicholasgasior/eclipse-jdt-search.git</developerConnection>
-        <url>https://github.com/nicholasgasior/eclipse-jdt-search</url>
+        <connection>scm:git:https://github.com/kaluchi/jdtbridge.git</connection>
+        <developerConnection>scm:git:git@github.com:kaluchi/jdtbridge.git</developerConnection>
+        <url>https://github.com/kaluchi/jdtbridge</url>
     </scm>
 
     <modules>

@@ -1,0 +1,191 @@
+// Eclipse management — discovery, lifecycle, p2 operations.
+
+import { execSync, spawn } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const IS_WIN = process.platform === "win32";
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** Return platform-specific executable name. */
+export function eclipseExe(name) {
+  return IS_WIN ? name + ".exe" : name;
+}
+
+/** Check if any Eclipse process is running. */
+export function isEclipseRunning() {
+  try {
+    if (IS_WIN) {
+      const out = execSync("tasklist", {
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      return out.toLowerCase().includes("eclipse.exe");
+    }
+    execSync("pgrep -f eclipse", { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Find Eclipse installation directory.
+ * Checks config first, then well-known locations.
+ */
+export function findEclipsePath(config) {
+  if (
+    config.eclipse &&
+    existsSync(join(config.eclipse, eclipseExe("eclipsec")))
+  ) {
+    return config.eclipse;
+  }
+  const candidates = IS_WIN
+    ? ["D:/eclipse", "C:/eclipse"]
+    : [
+        "/usr/local/eclipse",
+        "/opt/eclipse",
+        `${process.env.HOME}/eclipse`,
+      ];
+  for (const p of candidates) {
+    if (existsSync(join(p, eclipseExe("eclipsec")))) return p;
+  }
+  return null;
+}
+
+/** Read Eclipse version from .eclipseproduct file. */
+export function getEclipseVersion(eclipsePath) {
+  const f = join(eclipsePath, ".eclipseproduct");
+  if (!existsSync(f)) return null;
+  const m = readFileSync(f, "utf8").match(/version=(\S+)/);
+  return m ? m[1] : null;
+}
+
+/** Detect the p2 profile name from the profile registry. */
+export function detectProfile(eclipsePath) {
+  const regDir = join(
+    eclipsePath,
+    "p2",
+    "org.eclipse.equinox.p2.engine",
+    "profileRegistry",
+  );
+  if (!existsSync(regDir)) return null;
+  const dirs = readdirSync(regDir).filter((d) => d.endsWith(".profile"));
+  if (dirs.length === 0) return null;
+  const epp = dirs.find((d) => d.startsWith("epp.package."));
+  return (epp || dirs[0]).replace(".profile", "");
+}
+
+/** Find the installed version of a bundle in Eclipse plugins dir. */
+export function getInstalledVersion(eclipsePath, bundleId) {
+  const pluginsDir = join(eclipsePath, "plugins");
+  if (!existsSync(pluginsDir)) return null;
+  const jars = readdirSync(pluginsDir).filter(
+    (f) => f.startsWith(bundleId + "_") && f.endsWith(".jar"),
+  );
+  if (jars.length === 0) return null;
+  const m = jars[jars.length - 1].match(/_(.+)\.jar$/);
+  return m ? m[1] : "unknown";
+}
+
+/**
+ * Stop Eclipse gracefully, then force-kill if needed.
+ * Returns true if Eclipse is stopped, false if it could not be stopped.
+ */
+export function stopEclipse() {
+  if (!isEclipseRunning()) return true;
+  try {
+    if (IS_WIN) {
+      execSync("taskkill /IM eclipse.exe", { stdio: "ignore" });
+    } else {
+      execSync("pkill -f eclipse", { stdio: "ignore" });
+    }
+  } catch {
+    /* ignore */
+  }
+  for (let i = 0; i < 60; i++) {
+    sleep(500);
+    if (!isEclipseRunning()) return true;
+  }
+  try {
+    if (IS_WIN) {
+      execSync("taskkill /F /IM eclipse.exe", { stdio: "ignore" });
+    } else {
+      execSync("pkill -9 -f eclipse", { stdio: "ignore" });
+    }
+    sleep(2000);
+  } catch {
+    /* ignore */
+  }
+  return !isEclipseRunning();
+}
+
+/**
+ * Start Eclipse as a detached process.
+ * @returns {number} PID of the launched process
+ */
+export function startEclipse(eclipsePath, workspace) {
+  const exe = join(eclipsePath, eclipseExe("eclipse"));
+  const args = workspace ? ["-data", workspace] : [];
+  const child = spawn(exe, args, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: false,
+  });
+  child.unref();
+  return child.pid;
+}
+
+/** Run the p2 director application (headless Eclipse). */
+export function runDirector(eclipsePath, profile, extraArgs) {
+  const exe = join(eclipsePath, eclipseExe("eclipsec"));
+  const args = [
+    `"${exe}"`,
+    "-nosplash",
+    "-application",
+    "org.eclipse.equinox.p2.director",
+    "-profile",
+    profile,
+    "-destination",
+    `"${eclipsePath}"`,
+    ...extraArgs,
+  ].join(" ");
+
+  try {
+    return execSync(args + " 2>&1", {
+      encoding: "utf8",
+      timeout: 180_000,
+    });
+  } catch (e) {
+    const output = e.stdout || e.stderr || e.message;
+    const lines = output
+      .split("\n")
+      .filter(
+        (l) =>
+          !l.includes("DEBUG") &&
+          !l.includes("INFO:") &&
+          !l.includes("spifly") &&
+          l.trim(),
+      );
+    throw new Error(lines.join("\n"));
+  }
+}
+
+/** Install a feature via p2 director from a local repository. */
+export function p2Install(eclipsePath, profile, repoPath, featureIU) {
+  const repoUrl = `file:///${repoPath.replace(/\\/g, "/")}`;
+  return runDirector(eclipsePath, profile, [
+    "-repository",
+    `"${repoUrl}"`,
+    "-installIU",
+    featureIU,
+  ]);
+}
+
+/** Uninstall a feature via p2 director. */
+export function p2Uninstall(eclipsePath, profile, featureIU) {
+  return runDirector(eclipsePath, profile, ["-uninstallIU", featureIU]);
+}

@@ -16,11 +16,39 @@ Unlike grep, JDT search understands Java semantics: it resolves types across pro
 
 **Server side** (this project): An Eclipse plugin (`eclipse-plugin` packaging, built with Tycho). On activation, `Activator` starts a minimal HTTP server on a random port, bound to loopback only. Connection details are written to `~/.jdtbridge/instances/<hash>.json`.
 
-**Client side**: The `cli/` directory contains a Node.js CLI package (`@kaluchi/jdtbridge`). Install globally with `npm i -g` — provides `jdt` and `jdtbridge` commands. See [cli/README.md](cli/README.md) for full documentation.
+**Client side**: The `cli/` directory contains a Node.js CLI package (`@kaluchi/jdtbridge`). Install globally with `npm link` — provides `jdt` and `jdtbridge` commands. See [cli/README.md](cli/README.md) for full documentation.
 
 **Security**: The server binds to `127.0.0.1` only (not reachable from the network). Every request requires a `Bearer <token>` header. The token is a random 32-hex-char string generated on each Eclipse startup. Bridge files have POSIX `rwx------` permissions on Unix.
 
 **Multi-instance**: Multiple Eclipse instances can run simultaneously. Each writes its own instance file (`~/.jdtbridge/instances/<sha256-hash>.json`), keyed by workspace path. The CLI auto-discovers live instances via PID liveness checks.
+
+## Getting started
+
+Prerequisites: Node.js >= 20, Java, Maven, Eclipse IDE.
+
+```bash
+git clone https://github.com/kaluchi/jdtbridge.git
+cd jdtbridge/cli
+npm install
+npm link          # registers global `jdt` and `jdtbridge` commands
+jdt setup         # builds plugin (mvn verify), installs into Eclipse
+```
+
+`jdt setup` handles everything: runs the Maven build with integration tests, stops Eclipse if running, installs the plugin via p2 director, and restarts Eclipse with the same workspace.
+
+Alternatively, delegate to an AI coding agent (e.g. Claude Code) — it can clone, install, and run `jdt setup` for you.
+
+### Target platform
+
+The file `eclipse-jdt-search.target` points to a local Eclipse directory (default `D:\eclipse`). If your Eclipse is installed elsewhere, update the `<location path="...">` in that file before running `jdt setup`.
+
+### Updating
+
+After pulling new changes, run `jdt setup` again. Use `jdt setup --skip-build` to reinstall the last build without rebuilding.
+
+### Manual install (alternative)
+
+After `mvn clean verify`, use **Help > Install New Software** in Eclipse, point to the `site/target/repository/` directory, and install the "JDT Bridge" feature.
 
 ## HTTP API
 
@@ -125,52 +153,10 @@ Returns the file and cursor line of the currently active Eclipse editor.
 
 Open a type or method in the Eclipse editor.
 
-## Build
-
-Requires Maven and a Tycho target platform pointing to a local Eclipse installation.
-
-```bash
-cd eclipse-jdt-search
-mvn clean verify
-```
-
-The p2 update site is built at `site/target/repository/`.
-
-### Target platform
-
-The file `eclipse-jdt-search.target` points to a local Eclipse directory (default `D:\eclipse`). If your Eclipse is installed elsewhere, update the `<location path="...">` in that file.
-
-## Deploy
-
-### Option 1: Update site (recommended)
-
-After `mvn clean verify`, use **Help > Install New Software** in Eclipse, point to the `site/target/repository/` directory, and install the "JDT Bridge" feature.
-
-### Option 2: Manual JAR install
-
-1. Copy the built JAR to your Eclipse `plugins/` directory:
-
-   ```bash
-   cp plugin/target/io.github.kaluchi.jdtbridge-1.0.0-SNAPSHOT.jar /path/to/eclipse/plugins/
-   ```
-
-2. Add an entry to `bundles.info`:
-
-   ```bash
-   echo 'io.github.kaluchi.jdtbridge,1.0.0.qualifier,plugins/io.github.kaluchi.jdtbridge-1.0.0-SNAPSHOT.jar,4,false' \
-     >> /path/to/eclipse/configuration/org.eclipse.equinox.simpleconfigurator/bundles.info
-   ```
-
-   **auto-start must be `false`** (the `4,false` part). The bundle uses lazy activation (`Bundle-ActivationPolicy: lazy`) and the `org.eclipse.ui.startup` extension triggers activation at the right time.
-
-3. Restart Eclipse.
-
-4. Verify: `jdt projects`
-
 ## Project structure
 
 ```
-eclipse-jdt-search/
+jdtbridge/
   pom.xml                              # Parent POM (Tycho reactor)
   LICENSE                              # Apache License 2.0
   eclipse-jdt-search.target            # Target platform definition

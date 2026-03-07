@@ -28,6 +28,7 @@ import {
   activeEditorHelp,
   openHelp,
 } from "./commands/editor.mjs";
+import { setup, help as setupHelp } from "./commands/setup.mjs";
 import { isConnectionError } from "./client.mjs";
 import { bold, red } from "./color.mjs";
 
@@ -49,6 +50,7 @@ const commands = {
   move: { fn: move, help: moveHelp },
   "active-editor": { fn: activeEditor, help: activeEditorHelp },
   open: { fn: open, help: openHelp },
+  setup: { fn: setup, help: setupHelp },
 };
 
 function printOverview() {
@@ -82,6 +84,9 @@ Refactoring:
 Editor:
   active-editor                               current file and cursor line
   open <FQN> [method]                         open in Eclipse editor
+
+Setup:
+  setup [--check|--remove]                    install/check/remove Eclipse plugin
 
 Use "jdt help <command>" for detailed usage of any command.`);
 }

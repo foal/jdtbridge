@@ -22,7 +22,7 @@
    </license>
 
    <url>
-      <discovery label="JDT Search HTTP Bridge" url="https://github.com/nicholasgasior/eclipse-jdt-search"/>
+      <discovery label="JDT Search HTTP Bridge" url="https://github.com/kaluchi/jdtbridge"/>
    </url>
 
    <requires>

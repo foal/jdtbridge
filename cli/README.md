@@ -5,15 +5,35 @@ CLI for [Eclipse JDT Bridge](../README.md) — semantic Java analysis, refactori
 ## Install
 
 ```bash
-npm install -g @kaluchi/jdtbridge
+cd cli
+npm install
+npm link
 ```
 
-Provides two aliases: `jdt` (short) and `jdtbridge` (long).
+This registers two global commands: `jdt` (short) and `jdtbridge` (long).
 
 ## Prerequisites
 
-- Eclipse running with the `io.github.kaluchi.jdtbridge` plugin installed
 - Node.js >= 20
+- Java, Maven (for `jdt setup` — building the plugin from source)
+- Eclipse IDE
+
+## Plugin setup
+
+Install or update the Eclipse plugin in one command:
+
+```bash
+jdt setup                 # build from source (mvn verify) and install into Eclipse
+jdt setup --check         # show status of all components
+jdt setup --skip-build    # install last build without rebuilding
+jdt setup --clean         # clean build (mvn clean verify)
+jdt setup --remove        # uninstall the plugin from Eclipse
+jdt setup --eclipse D:/eclipse  # specify Eclipse path (saved to config)
+```
+
+If Eclipse is running, you will be prompted to stop it. After installation, Eclipse is restarted automatically with the same workspace.
+
+Once installed, Eclipse must be running with the plugin for all other commands to work.
 
 ## Usage
 
