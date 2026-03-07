@@ -23,6 +23,7 @@ public class HttpServer {
     private final RefactoringHandler refactoring = new RefactoringHandler();
     private final EditorHandler editor = new EditorHandler();
     private final TestHandler test = new TestHandler();
+    private final ProjectHandler projectInfo = new ProjectHandler();
     private volatile ServerSocket serverSocket;
     private volatile boolean running;
 
@@ -119,6 +120,8 @@ public class HttpServer {
         try {
             return switch (path) {
                 case "/projects" -> Response.json(search.handleProjects());
+                case "/project-info" -> Response.json(
+                        projectInfo.handleProjectInfo(params));
                 case "/find" -> Response.json(search.handleFind(params));
                 case "/references" -> Response.json(search.handleReferences(params));
                 case "/subtypes" -> Response.json(search.handleSubtypes(params));
