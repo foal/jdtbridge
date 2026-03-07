@@ -3,6 +3,7 @@ import {
   mkdtempSync,
   mkdirSync,
   writeFileSync,
+  readFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -13,6 +14,7 @@ import {
   getInstalledVersion,
   findEclipsePath,
   getEclipseJavaHome,
+  generateTargetPlatform,
 } from "../src/eclipse.mjs";
 
 const IS_WIN = process.platform === "win32";
@@ -193,6 +195,29 @@ describe("eclipse", () => {
       const result = getEclipseJavaHome(testDir);
       expect(result).toContain("jre");
       expect(result).not.toContain("bin");
+    });
+  });
+
+  describe("generateTargetPlatform", () => {
+    it("writes target file with Eclipse path", () => {
+      generateTargetPlatform(testDir, "D:/eclipse");
+      const content = readFileSync(join(testDir, "jdtbridge.target"), "utf8");
+      expect(content).toContain('path="D:/eclipse"');
+      expect(content).toContain('type="Directory"');
+      expect(content).toContain("<?xml");
+    });
+
+    it("preserves backslashes as-is (no double escaping)", () => {
+      generateTargetPlatform(testDir, "D:\\eclipse");
+      const content = readFileSync(join(testDir, "jdtbridge.target"), "utf8");
+      expect(content).toContain('path="D:\\eclipse"');
+      expect(content).not.toContain("\\\\");
+    });
+
+    it("handles paths with spaces", () => {
+      generateTargetPlatform(testDir, "C:/Program Files/eclipse");
+      const content = readFileSync(join(testDir, "jdtbridge.target"), "utf8");
+      expect(content).toContain('path="C:/Program Files/eclipse"');
     });
   });
 });

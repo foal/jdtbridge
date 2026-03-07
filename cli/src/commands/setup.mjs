@@ -1,6 +1,6 @@
 // Setup command — install/update/remove the Eclipse JDT Bridge plugin.
 
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
@@ -19,6 +19,7 @@ import {
   stopEclipse,
   startEclipse,
   getEclipseJavaHome,
+  generateTargetPlatform,
   p2Install,
   p2Uninstall,
 } from "../eclipse.mjs";
@@ -98,21 +99,6 @@ function findRepoRoot() {
 function getBuiltRepoPath(repoRoot) {
   const dir = join(repoRoot, "site", "target", "repository");
   return existsSync(dir) ? dir : null;
-}
-
-function generateTargetPlatform(repoRoot, eclipsePath) {
-  const targetFile = join(repoRoot, "jdtbridge.target");
-  const escapedPath = eclipsePath.replace(/\\/g, "\\\\");
-  const content = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<?pde version="3.8"?>
-<target name="eclipse-local" sequenceNumber="1">
-    <locations>
-        <location path="${escapedPath}" type="Directory"/>
-    </locations>
-</target>
-`;
-  writeFileSync(targetFile, content);
-  info(`Target platform: ${eclipsePath}`);
 }
 
 // ---- ensure Eclipse is stopped, with confirmation ----
@@ -241,6 +227,7 @@ async function runInstall(config, flags) {
 
   if (!flags["skip-build"]) {
     generateTargetPlatform(repoRoot, eclipsePath);
+    info(`Target platform: ${eclipsePath}`);
     const javaHome = getEclipseJavaHome(eclipsePath);
     const mvnEnv = javaHome
       ? { ...process.env, JAVA_HOME: javaHome }

@@ -1,7 +1,7 @@
 // Eclipse management — discovery, lifecycle, p2 operations.
 
 import { execSync, spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 
 const IS_WIN = process.platform === "win32";
@@ -160,6 +160,20 @@ export function startEclipse(eclipsePath, workspace) {
   });
   child.unref();
   return child.pid;
+}
+
+/** Generate jdtbridge.target pointing to the Eclipse installation. */
+export function generateTargetPlatform(repoRoot, eclipsePath) {
+  const targetFile = join(repoRoot, "jdtbridge.target");
+  const content = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?pde version="3.8"?>
+<target name="eclipse-local" sequenceNumber="1">
+    <locations>
+        <location path="${eclipsePath}" type="Directory"/>
+    </locations>
+</target>
+`;
+  writeFileSync(targetFile, content);
 }
 
 /** Run the p2 director application (headless Eclipse). */
