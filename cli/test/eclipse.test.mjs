@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   mkdtempSync,
   mkdirSync,
@@ -7,6 +7,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { createServer } from "node:http";
 import {
   eclipseExe,
   getEclipseVersion,
@@ -15,6 +16,7 @@ import {
   findEclipsePath,
   getEclipseJavaHome,
   generateTargetPlatform,
+  waitForBridge,
 } from "../src/eclipse.mjs";
 
 const IS_WIN = process.platform === "win32";
@@ -218,6 +220,72 @@ describe("eclipse", () => {
       generateTargetPlatform(testDir, "C:/Program Files/eclipse");
       const content = readFileSync(join(testDir, "jdtbridge.target"), "utf8");
       expect(content).toContain('path="C:/Program Files/eclipse"');
+    });
+  });
+
+  describe("waitForBridge", () => {
+    let server;
+
+    function startMockServer(handler) {
+      return new Promise((res) => {
+        server = createServer(handler);
+        server.listen(0, "127.0.0.1", () =>
+          res(server.address().port),
+        );
+      });
+    }
+
+    afterEach(() => {
+      if (server) {
+        server.close();
+        server = null;
+      }
+    });
+
+    it("resolves when instance appears and health check passes", async () => {
+      const port = await startMockServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(["proj-a", "proj-b"]));
+      });
+      const discoverFn = () => [
+        { pid: 42, port, token: null, workspace: "/ws" },
+      ];
+      const result = await waitForBridge(discoverFn, 42, 5);
+      expect(result.port).toBe(port);
+      expect(result.projects).toEqual(["proj-a", "proj-b"]);
+    });
+
+    it("waits for instance to appear (not found initially)", async () => {
+      const port = await startMockServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(["proj"]));
+      });
+      let callCount = 0;
+      const discoverFn = () => {
+        callCount++;
+        // Instance appears on third poll
+        if (callCount < 3) return [];
+        return [{ pid: 99, port, token: null, workspace: "/ws" }];
+      };
+      const result = await waitForBridge(discoverFn, 99, 30);
+      expect(result.port).toBe(port);
+      expect(callCount).toBeGreaterThanOrEqual(3);
+    });
+
+    it("rejects on timeout when instance never appears", async () => {
+      const discoverFn = () => [];
+      await expect(
+        waitForBridge(discoverFn, 999, 3),
+      ).rejects.toThrow("Timed out");
+    });
+
+    it("ignores instances with different PID", async () => {
+      const discoverFn = () => [
+        { pid: 100, port: 9999, token: null, workspace: "/ws" },
+      ];
+      await expect(
+        waitForBridge(discoverFn, 200, 3),
+      ).rejects.toThrow("Timed out");
     });
   });
 });
