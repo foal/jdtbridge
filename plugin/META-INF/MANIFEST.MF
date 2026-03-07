@@ -1,11 +1,11 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: JDT Search HTTP Server
-Bundle-SymbolicName: app.m8.eclipse.jdtsearch;singleton:=true
+Bundle-SymbolicName: io.github.kaluchi.jdtbridge;singleton:=true
 Bundle-Version: 1.0.0.qualifier
-Bundle-Activator: app.m8.eclipse.jdtsearch.Activator
+Bundle-Activator: io.github.kaluchi.jdtbridge.Activator
 Bundle-RequiredExecutionEnvironment: JavaSE-21
-Automatic-Module-Name: app.m8.eclipse.jdtsearch
+Automatic-Module-Name: io.github.kaluchi.jdtbridge
 Require-Bundle: org.eclipse.core.runtime,
  org.eclipse.core.resources,
  org.eclipse.jdt.core,

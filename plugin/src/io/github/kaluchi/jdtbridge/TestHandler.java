@@ -1,4 +1,4 @@
-package app.m8.eclipse.jdtsearch;
+package io.github.kaluchi.jdtbridge;
 
 import java.util.ArrayList;
 import java.util.List;

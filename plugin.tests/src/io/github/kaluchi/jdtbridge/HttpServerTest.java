@@ -1,4 +1,4 @@
-package app.m8.eclipse.jdtsearch;
+package io.github.kaluchi.jdtbridge;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;

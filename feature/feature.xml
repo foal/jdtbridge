@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <feature
-      id="app.m8.eclipse.jdtsearch.feature"
+      id="io.github.kaluchi.jdtbridge.feature"
       label="JDT Search HTTP Bridge"
       version="1.0.0.qualifier"
       provider-name="m8">
@@ -39,7 +39,7 @@
    </requires>
 
    <plugin
-         id="app.m8.eclipse.jdtsearch"
+         id="io.github.kaluchi.jdtbridge"
          download-size="0"
          install-size="0"
          version="0.0.0"

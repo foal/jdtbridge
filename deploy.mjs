@@ -24,7 +24,7 @@ const PLUGIN_DIR = "D:/git/eclipse-jdt-search";
 const ECLIPSE_DIR = "D:/eclipse";
 const ECLIPSE_EXE = join(ECLIPSE_DIR, "eclipse.exe");
 const WORKSPACE = "D:/eclipse-workspace";
-const BUNDLE_ID = "app.m8.eclipse.jdtsearch";
+const BUNDLE_ID = "io.github.kaluchi.jdtbridge";
 const BUNDLES_INFO = join(ECLIPSE_DIR, "configuration/org.eclipse.equinox.simpleconfigurator/bundles.info");
 
 const skipBuild = process.argv.includes("--skip-build");

@@ -1,4 +1,4 @@
-package app.m8.eclipse.jdtsearch;
+package io.github.kaluchi.jdtbridge;
 
 import java.io.BufferedReader;
 import java.io.IOException;

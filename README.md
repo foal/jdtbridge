@@ -114,7 +114,7 @@ mvn package
 
 The built JAR is at:
 ```
-plugin/target/app.m8.eclipse.jdtsearch-1.0.0-SNAPSHOT.jar
+plugin/target/io.github.kaluchi.jdtbridge-1.0.0-SNAPSHOT.jar
 ```
 
 ### Target platform
@@ -130,13 +130,13 @@ The file `eclipse-jdt-search.target` points to a local Eclipse directory (`D:\ec
 1. Copy the built JAR to your Eclipse `plugins/` directory:
 
    ```bash
-   cp plugin/target/app.m8.eclipse.jdtsearch-1.0.0-SNAPSHOT.jar D:/eclipse/plugins/
+   cp plugin/target/io.github.kaluchi.jdtbridge-1.0.0-SNAPSHOT.jar D:/eclipse/plugins/
    ```
 
 2. Add an entry to `bundles.info` so Eclipse loads it:
 
    ```bash
-   echo 'app.m8.eclipse.jdtsearch,1.0.0.qualifier,plugins/app.m8.eclipse.jdtsearch-1.0.0-SNAPSHOT.jar,4,false' \
+   echo 'io.github.kaluchi.jdtbridge,1.0.0.qualifier,plugins/io.github.kaluchi.jdtbridge-1.0.0-SNAPSHOT.jar,4,false' \
      >> D:/eclipse/configuration/org.eclipse.equinox.simpleconfigurator/bundles.info
    ```
 
@@ -154,7 +154,7 @@ After modifying the plugin source and rebuilding:
 
 ```bash
 mvn package
-cp plugin/target/app.m8.eclipse.jdtsearch-1.0.0-SNAPSHOT.jar D:/eclipse/plugins/
+cp plugin/target/io.github.kaluchi.jdtbridge-1.0.0-SNAPSHOT.jar D:/eclipse/plugins/
 ```
 
 No need to edit `bundles.info` again -- just overwrite the JAR and restart Eclipse.
@@ -170,7 +170,7 @@ eclipse-jdt-search/
     META-INF/MANIFEST.MF               # OSGi manifest
     plugin.xml                         # Extension: org.eclipse.ui.startup
     build.properties
-    src/app/m8/eclipse/jdtsearch/
+    src/io/github/kaluchi/jdtbridge/
       Activator.java                   # Bundle activator - starts HTTP server
       HttpServer.java                  # Raw-socket HTTP server + routing
       SearchHandler.java               # /find, /references, /subtypes (JDT search)
