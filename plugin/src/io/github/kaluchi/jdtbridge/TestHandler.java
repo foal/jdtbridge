@@ -30,7 +30,8 @@ import org.eclipse.jdt.junit.model.ITestRunSession;
 import org.eclipse.jdt.launching.IJavaLaunchConfigurationConstants;
 
 /**
- * Handler for /test endpoint: run JUnit tests via Eclipse's built-in runner.
+ * Handler for /test endpoint: run JUnit tests via Eclipse's
+ * built-in runner.
  */
 class TestHandler {
 
@@ -58,24 +59,7 @@ class TestHandler {
 
         // Refresh project from disk before running (default: on)
         if (!noRefresh) {
-            IJavaProject refreshProject = null;
-            if (fqn != null && !fqn.isBlank()) {
-                IType t = findType(fqn);
-                if (t != null) refreshProject = t.getJavaProject();
-            } else if (projectName != null && !projectName.isBlank()) {
-                var model = JavaCore.create(
-                        ResourcesPlugin.getWorkspace().getRoot());
-                refreshProject = model.getJavaProject(projectName);
-            }
-            if (refreshProject != null && refreshProject.exists()) {
-                refreshProject.getProject().refreshLocal(
-                        org.eclipse.core.resources.IResource.DEPTH_INFINITE,
-                        new NullProgressMonitor());
-                // Wait for auto-build after refresh
-                org.eclipse.core.runtime.jobs.Job.getJobManager().join(
-                        ResourcesPlugin.FAMILY_AUTO_BUILD,
-                        new NullProgressMonitor());
-            }
+            refreshProject(fqn, projectName);
         }
 
         ILaunchManager manager =
@@ -83,7 +67,8 @@ class TestHandler {
         ILaunchConfigurationType launchType =
                 manager.getLaunchConfigurationType(JUNIT_LAUNCH_TYPE);
         if (launchType == null) {
-            return "{\"error\":\"JUnit launch type not available\"}";
+            return Json.error(
+                    "JUnit launch type not available");
         }
 
         String configName = "jdt-bridge-test-"
@@ -92,47 +77,96 @@ class TestHandler {
                 launchType.newInstance(null, configName);
 
         // Determine what to run
+        String configError = configureLaunch(
+                wc, fqn, methodName, projectName, packageName);
+        if (configError != null) {
+            return configError;
+        }
+
+        // Register listener before launch
+        CountDownLatch latch = new CountDownLatch(1);
+        ResultCollector collector =
+                new ResultCollector(configName, latch);
+        JUnitCore.addTestRunListener(collector);
+
+        ILaunch launch =
+                new Launch(wc, ILaunchManager.RUN_MODE, null);
+        manager.addLaunch(launch);
+
+        try {
+            JUnitLaunchConfigurationDelegate delegate =
+                    new JUnitLaunchConfigurationDelegate();
+            delegate.launch(wc, ILaunchManager.RUN_MODE,
+                    launch, new NullProgressMonitor());
+
+            if (!latch.await(timeoutSec, TimeUnit.SECONDS)) {
+                return Json.error("Test run timed out after "
+                        + timeoutSec + "s");
+            }
+
+            return collector.toJson();
+        } finally {
+            JUnitCore.removeTestRunListener(collector);
+            if (!launch.isTerminated()) {
+                try {
+                    launch.terminate();
+                } catch (Exception e) {
+                    Log.warn("Failed to terminate launch", e);
+                }
+            }
+            manager.removeLaunch(launch);
+        }
+    }
+
+    // ---- Launch configuration ----
+
+    private String configureLaunch(
+            ILaunchConfigurationWorkingCopy wc,
+            String fqn, String methodName,
+            String projectName, String packageName)
+            throws Exception {
         if (fqn != null && !fqn.isBlank()) {
-            // Run specific class (optionally a method)
-            IType type = findType(fqn);
+            IType type = JdtUtils.findType(fqn);
             if (type == null) {
-                return "{\"error\":\"Type not found: "
-                        + HttpServer.escapeJson(fqn) + "\"}";
+                return Json.error("Type not found: " + fqn);
             }
 
             IJavaProject jp = type.getJavaProject();
             wc.setAttribute(
-                    IJavaLaunchConfigurationConstants.ATTR_PROJECT_NAME,
+                    IJavaLaunchConfigurationConstants
+                            .ATTR_PROJECT_NAME,
                     jp.getElementName());
             wc.setAttribute(
-                    IJavaLaunchConfigurationConstants.ATTR_MAIN_TYPE_NAME,
+                    IJavaLaunchConfigurationConstants
+                            .ATTR_MAIN_TYPE_NAME,
                     fqn);
-            wc.setAttribute(ATTR_TEST_KIND, detectTestKind(type));
+            wc.setAttribute(ATTR_TEST_KIND,
+                    detectTestKind(type));
 
             if (methodName != null && !methodName.isBlank()) {
                 wc.setAttribute(ATTR_TEST_NAME, methodName);
             }
         } else if (projectName != null && !projectName.isBlank()) {
-            // Run by project/package
             var model = JavaCore.create(
                     ResourcesPlugin.getWorkspace().getRoot());
             IJavaProject jp = model.getJavaProject(projectName);
             if (jp == null || !jp.exists()) {
-                return "{\"error\":\"Project not found: "
-                        + HttpServer.escapeJson(projectName) + "\"}";
+                return Json.error(
+                        "Project not found: " + projectName);
             }
 
             wc.setAttribute(
-                    IJavaLaunchConfigurationConstants.ATTR_PROJECT_NAME,
+                    IJavaLaunchConfigurationConstants
+                            .ATTR_PROJECT_NAME,
                     projectName);
             wc.setAttribute(ATTR_TEST_KIND, JUNIT5_KIND);
 
             if (packageName != null && !packageName.isBlank()) {
-                // Find package fragment
-                IPackageFragment pkg = findPackage(jp, packageName);
+                IPackageFragment pkg =
+                        findPackage(jp, packageName);
                 if (pkg == null) {
-                    return "{\"error\":\"Package not found: "
-                            + HttpServer.escapeJson(packageName) + "\"}";
+                    return Json.error(
+                            "Package not found: " + packageName);
                 }
                 wc.setAttribute(ATTR_TEST_CONTAINER,
                         pkg.getHandleIdentifier());
@@ -141,37 +175,35 @@ class TestHandler {
                         jp.getHandleIdentifier());
             }
         } else {
-            return "{\"error\":\"Missing 'class' or 'project' parameter\"}";
+            return Json.error(
+                    "Missing 'class' or 'project' parameter");
         }
+        return null;
+    }
 
-        // Register listener before launch
-        CountDownLatch latch = new CountDownLatch(1);
-        ResultCollector collector = new ResultCollector(configName, latch);
-        JUnitCore.addTestRunListener(collector);
-
-        try {
-            // Call delegate.launch() directly, bypassing preLaunchCheck
-            // which may show save/build dialogs and block
-            JUnitLaunchConfigurationDelegate delegate =
-                    new JUnitLaunchConfigurationDelegate();
-            ILaunch launch = new Launch(wc, ILaunchManager.RUN_MODE, null);
-            DebugPlugin.getDefault().getLaunchManager()
-                    .addLaunch(launch);
-            delegate.launch(wc, ILaunchManager.RUN_MODE,
-                    launch, new NullProgressMonitor());
-
-            if (!latch.await(timeoutSec, TimeUnit.SECONDS)) {
-                return "{\"error\":\"Test run timed out after "
-                        + timeoutSec + "s\"}";
-            }
-
-            return collector.toJson();
-        } finally {
-            JUnitCore.removeTestRunListener(collector);
+    private void refreshProject(String fqn, String projectName)
+            throws Exception {
+        IJavaProject refreshProject = null;
+        if (fqn != null && !fqn.isBlank()) {
+            IType t = JdtUtils.findType(fqn);
+            if (t != null) refreshProject = t.getJavaProject();
+        } else if (projectName != null && !projectName.isBlank()) {
+            var model = JavaCore.create(
+                    ResourcesPlugin.getWorkspace().getRoot());
+            refreshProject = model.getJavaProject(projectName);
+        }
+        if (refreshProject != null && refreshProject.exists()) {
+            refreshProject.getProject().refreshLocal(
+                    org.eclipse.core.resources.IResource
+                            .DEPTH_INFINITE,
+                    new NullProgressMonitor());
+            org.eclipse.core.runtime.jobs.Job.getJobManager().join(
+                    ResourcesPlugin.FAMILY_AUTO_BUILD,
+                    new NullProgressMonitor());
         }
     }
 
-    // ---- result collector ----
+    // ---- Result collector ----
 
     private static class ResultCollector extends TestRunListener {
         private final String configName;
@@ -201,74 +233,70 @@ class TestHandler {
             try {
                 for (ITestElement child : container.getChildren()) {
                     if (child instanceof ITestCaseElement tc) {
-                        var result = tc.getTestResult(false);
-                        total++;
-                        TestResult tr = new TestResult();
-                        tr.className = tc.getTestClassName();
-                        tr.method = tc.getTestMethodName();
-
-                        if (result == ITestElement.Result.OK) {
-                            tr.status = "PASS";
-                            passed++;
-                        } else if (result == ITestElement.Result.FAILURE) {
-                            tr.status = "FAIL";
-                            failed++;
-                            FailureTrace ft = tc.getFailureTrace();
-                            if (ft != null) tr.trace = ft.getTrace();
-                        } else if (result == ITestElement.Result.ERROR) {
-                            tr.status = "ERROR";
-                            errors++;
-                            FailureTrace ft = tc.getFailureTrace();
-                            if (ft != null) tr.trace = ft.getTrace();
-                        } else if (result == ITestElement.Result.IGNORED) {
-                            tr.status = "IGNORED";
-                            ignored++;
-                        } else {
-                            tr.status = "UNKNOWN";
-                        }
-                        results.add(tr);
+                        recordTestCase(tc);
                     }
-                    if (child instanceof ITestElementContainer nested) {
-                        collectResults(nested);
+                    if (child instanceof ITestElementContainer c) {
+                        collectResults(c);
                     }
                 }
-            } catch (Exception e) { /* ignore */ }
+            } catch (Exception e) {
+                Log.warn("collectResults failed", e);
+            }
+        }
+
+        private void recordTestCase(ITestCaseElement tc) {
+            var result = tc.getTestResult(false);
+            total++;
+            TestResult tr = new TestResult();
+            tr.className = tc.getTestClassName();
+            tr.method = tc.getTestMethodName();
+
+            if (result == ITestElement.Result.OK) {
+                tr.status = "PASS";
+                passed++;
+            } else if (result == ITestElement.Result.FAILURE) {
+                tr.status = "FAIL";
+                failed++;
+                FailureTrace ft = tc.getFailureTrace();
+                if (ft != null) tr.trace = ft.getTrace();
+            } else if (result == ITestElement.Result.ERROR) {
+                tr.status = "ERROR";
+                errors++;
+                FailureTrace ft = tc.getFailureTrace();
+                if (ft != null) tr.trace = ft.getTrace();
+            } else if (result == ITestElement.Result.IGNORED) {
+                tr.status = "IGNORED";
+                ignored++;
+            } else {
+                tr.status = "UNKNOWN";
+            }
+            results.add(tr);
         }
 
         String toJson() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("{\"total\":").append(total)
-                    .append(",\"passed\":").append(passed)
-                    .append(",\"failed\":").append(failed)
-                    .append(",\"errors\":").append(errors)
-                    .append(",\"ignored\":").append(ignored)
-                    .append(",\"time\":").append(totalTime);
-
-            // Only include failed/error details
-            List<TestResult> failures = results.stream()
-                    .filter(r -> !"PASS".equals(r.status)
-                            && !"IGNORED".equals(r.status))
-                    .toList();
-
-            sb.append(",\"failures\":[");
-            for (int i = 0; i < failures.size(); i++) {
-                if (i > 0) sb.append(",");
-                TestResult r = failures.get(i);
-                sb.append("{\"class\":\"")
-                        .append(HttpServer.escapeJson(r.className))
-                        .append("\",\"method\":\"")
-                        .append(HttpServer.escapeJson(r.method))
-                        .append("\",\"status\":\"").append(r.status)
-                        .append("\"");
+            Json failures = Json.array();
+            for (TestResult r : results) {
+                if ("PASS".equals(r.status)
+                        || "IGNORED".equals(r.status)) continue;
+                Json f = Json.object()
+                        .put("class", r.className)
+                        .put("method", r.method)
+                        .put("status", r.status);
                 if (r.trace != null) {
-                    sb.append(",\"trace\":\"")
-                            .append(HttpServer.escapeJson(r.trace))
-                            .append("\"");
+                    f.put("trace", r.trace);
                 }
-                sb.append("}");
+                failures.add(f);
             }
-            sb.append("]}");
-            return sb.toString();
+
+            return Json.object()
+                    .put("total", total)
+                    .put("passed", passed)
+                    .put("failed", failed)
+                    .put("errors", errors)
+                    .put("ignored", ignored)
+                    .put("time", totalTime)
+                    .put("failures", failures)
+                    .toString();
         }
     }
 
@@ -279,33 +307,25 @@ class TestHandler {
         String trace;
     }
 
-    // ---- helpers ----
+    // ---- Helpers ----
 
-    private String detectTestKind(IType type) {
-        // Check if JUnit 5 annotations are on classpath
+    String detectTestKind(IType type) {
         try {
             IType junit5 = type.getJavaProject()
                     .findType("org.junit.jupiter.api.Test");
             if (junit5 != null) return JUNIT5_KIND;
-        } catch (JavaModelException e) { /* ignore */ }
-        return JUNIT4_KIND;
-    }
-
-    private IType findType(String fqn) throws JavaModelException {
-        var model = JavaCore.create(
-                ResourcesPlugin.getWorkspace().getRoot());
-        for (IJavaProject project : model.getJavaProjects()) {
-            IType type = project.findType(fqn);
-            if (type != null && type.exists()) return type;
+        } catch (JavaModelException e) {
+            Log.warn("detectTestKind failed", e);
         }
-        return null;
+        return JUNIT4_KIND;
     }
 
     private IPackageFragment findPackage(IJavaProject project,
             String packageName) throws JavaModelException {
         for (var root : project.getPackageFragmentRoots()) {
             if (root.getKind()
-                    == org.eclipse.jdt.core.IPackageFragmentRoot.K_SOURCE) {
+                    == org.eclipse.jdt.core.IPackageFragmentRoot
+                            .K_SOURCE) {
                 IPackageFragment pkg =
                         root.getPackageFragment(packageName);
                 if (pkg != null && pkg.exists()) return pkg;
@@ -314,9 +334,12 @@ class TestHandler {
         return null;
     }
 
-    private int parseTimeout(String s, int defaultVal) {
+    int parseTimeout(String s, int defaultVal) {
         if (s == null) return defaultVal;
-        try { return Integer.parseInt(s); }
-        catch (NumberFormatException e) { return defaultVal; }
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return defaultVal;
+        }
     }
 }

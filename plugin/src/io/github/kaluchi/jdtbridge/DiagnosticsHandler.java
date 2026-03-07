@@ -1,7 +1,5 @@
 package io.github.kaluchi.jdtbridge;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
@@ -14,7 +12,8 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.jobs.Job;
 
 /**
- * Handler for /errors endpoint: compilation diagnostics with optional refresh/build.
+ * Handler for /errors endpoint: compilation diagnostics
+ * with optional refresh/build.
  */
 class DiagnosticsHandler {
 
@@ -34,14 +33,14 @@ class DiagnosticsHandler {
         if (filePath != null && !filePath.isBlank()) {
             scope = root.findMember(filePath);
             if (scope == null) {
-                return "{\"error\":\"Resource not found: "
-                        + HttpServer.escapeJson(filePath) + "\"}";
+                return Json.error(
+                        "Resource not found: " + filePath);
             }
         } else if (projectName != null && !projectName.isBlank()) {
             IProject project = root.getProject(projectName);
             if (!project.exists()) {
-                return "{\"error\":\"Project not found: "
-                        + HttpServer.escapeJson(projectName) + "\"}";
+                return Json.error(
+                        "Project not found: " + projectName);
             }
             scope = project;
         } else {
@@ -66,21 +65,24 @@ class DiagnosticsHandler {
         // Build
         if (clean) {
             if (buildProject == null) {
-                return "{\"error\":\"clean requires a specific project"
-                        + " (use 'project' param)\"}";
+                return Json.error("clean requires a specific project"
+                        + " (use 'project' param)");
             }
-            buildProject.build(IncrementalProjectBuilder.CLEAN_BUILD, null);
-            buildProject.build(IncrementalProjectBuilder.FULL_BUILD, null);
+            buildProject.build(
+                    IncrementalProjectBuilder.CLEAN_BUILD, null);
+            buildProject.build(
+                    IncrementalProjectBuilder.FULL_BUILD, null);
         } else if (build) {
             if (buildProject != null) {
                 buildProject.build(
-                        IncrementalProjectBuilder.INCREMENTAL_BUILD, null);
+                        IncrementalProjectBuilder.INCREMENTAL_BUILD,
+                        null);
             } else {
                 ResourcesPlugin.getWorkspace().build(
-                        IncrementalProjectBuilder.INCREMENTAL_BUILD, null);
+                        IncrementalProjectBuilder.INCREMENTAL_BUILD,
+                        null);
             }
         } else if (refresh) {
-            // Auto-build is on — wait for it to finish after refresh
             Job.getJobManager().join(
                     ResourcesPlugin.FAMILY_AUTO_BUILD, null);
         }
@@ -91,10 +93,11 @@ class DiagnosticsHandler {
         IMarker[] markers = scope.findMarkers(
                 markerType, true, IResource.DEPTH_INFINITE);
 
-        List<String> results = new ArrayList<>();
+        Json arr = Json.array();
         for (IMarker marker : markers) {
             int severity = marker.getAttribute(IMarker.SEVERITY, -1);
-            if (!includeWarnings && severity != IMarker.SEVERITY_ERROR) {
+            if (!includeWarnings
+                    && severity != IMarker.SEVERITY_ERROR) {
                 continue;
             }
             String sevStr = switch (severity) {
@@ -102,35 +105,32 @@ class DiagnosticsHandler {
                 case IMarker.SEVERITY_WARNING -> "WARNING";
                 default -> "INFO";
             };
-            String file = marker.getResource().getFullPath().toString();
-            int line = marker.getAttribute(IMarker.LINE_NUMBER, -1);
-            String message = marker.getAttribute(IMarker.MESSAGE, "");
 
-            StringBuilder entry = new StringBuilder();
-            entry.append("{\"file\":\"").append(HttpServer.escapeJson(file))
-                    .append("\",\"line\":").append(line)
-                    .append(",\"severity\":\"").append(sevStr)
-                    .append("\",\"message\":\"")
-                    .append(HttpServer.escapeJson(message)).append("\"");
+            Json entry = Json.object()
+                    .put("file", marker.getResource()
+                            .getFullPath().toString())
+                    .put("line", marker.getAttribute(
+                            IMarker.LINE_NUMBER, -1))
+                    .put("severity", sevStr)
+                    .put("message", marker.getAttribute(
+                            IMarker.MESSAGE, ""));
             if (all) {
-                entry.append(",\"source\":\"")
-                        .append(HttpServer.escapeJson(
-                                shortMarkerType(marker.getType())))
-                        .append("\"");
+                entry.put("source",
+                        shortMarkerType(marker.getType()));
             }
-            entry.append("}");
-            results.add(entry.toString());
+            arr.add(entry);
         }
-
-        return "[" + String.join(",", results) + "]";
+        return arr.toString();
     }
 
-    private String shortMarkerType(String type) {
+    String shortMarkerType(String type) {
         if (type == null) return "unknown";
         if (type.contains("jdt")) return "jdt";
-        if (type.contains("eclipsecs") || type.contains("checkstyle"))
+        if (type.contains("eclipsecs")
+                || type.contains("checkstyle"))
             return "checkstyle";
-        if (type.contains("m2e") || type.contains("maven")) return "maven";
+        if (type.contains("m2e") || type.contains("maven"))
+            return "maven";
         // Last segment: org.foo.bar.Problem → Problem
         int dot = type.lastIndexOf('.');
         return dot >= 0 ? type.substring(dot + 1) : type;

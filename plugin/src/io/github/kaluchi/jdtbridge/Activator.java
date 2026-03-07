@@ -28,8 +28,7 @@ public class Activator implements BundleActivator {
         int port = server.getPort();
         writeBridgeFile(port, token);
 
-        System.out.println("[jdt-search] HTTP server started on port "
-                + port);
+        Log.info("HTTP server started on port " + port);
     }
 
     @Override
@@ -39,7 +38,7 @@ public class Activator implements BundleActivator {
             server = null;
         }
         deleteBridgeFile();
-        System.out.println("[jdt-search] HTTP server stopped");
+        Log.info("HTTP server stopped");
     }
 
     private void writeBridgeFile(int port, String token)
@@ -61,11 +60,13 @@ public class Activator implements BundleActivator {
         if (bridgeFile != null) {
             try {
                 Files.deleteIfExists(bridgeFile);
-            } catch (IOException e) { /* ignore */ }
+            } catch (IOException e) {
+                Log.warn("Failed to delete bridge file", e);
+            }
         }
     }
 
-    private static String generateToken() {
+    static String generateToken() {
         byte[] bytes = new byte[TOKEN_BYTES];
         new SecureRandom().nextBytes(bytes);
         StringBuilder sb = new StringBuilder(TOKEN_BYTES * 2);

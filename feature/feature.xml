@@ -3,7 +3,7 @@
       id="io.github.kaluchi.jdtbridge.feature"
       label="JDT Search HTTP Bridge"
       version="1.0.0.qualifier"
-      provider-name="m8">
+      provider-name="kaluchi">
 
    <description>
       Exposes Eclipse JDT SearchEngine, refactoring, diagnostics, and test runner
@@ -14,7 +14,7 @@
    </description>
 
    <copyright>
-      Copyright (c) 2026 m8. All rights reserved.
+      Copyright (c) 2026 kaluchi. All rights reserved.
    </copyright>
 
    <license url="https://www.apache.org/licenses/LICENSE-2.0">

@@ -2,13 +2,9 @@ package io.github.kaluchi.jdtbridge;
 
 import java.util.Map;
 
-import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.jdt.core.IJavaElement;
-import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.IType;
-import org.eclipse.jdt.core.JavaCore;
-import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.ui.JavaUI;
 import org.eclipse.jface.text.ITextSelection;
 import org.eclipse.swt.widgets.Display;
@@ -22,17 +18,22 @@ import org.eclipse.ui.PlatformUI;
 class EditorHandler {
 
     String handleActiveEditor(Map<String, String> params) throws Exception {
-        String[] result = new String[1];
+        String[] result = {Json.error("Failed to query editor")};
         Display.getDefault().syncExec(() -> {
             try {
-                var window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
-                if (window == null || window.getActivePage() == null) {
-                    result[0] = "{\"file\":null}";
+                var window = PlatformUI.getWorkbench()
+                        .getActiveWorkbenchWindow();
+                if (window == null
+                        || window.getActivePage() == null) {
+                    result[0] = Json.object()
+                            .put("file", (String) null).toString();
                     return;
                 }
-                IEditorPart editor = window.getActivePage().getActiveEditor();
+                IEditorPart editor =
+                        window.getActivePage().getActiveEditor();
                 if (editor == null) {
-                    result[0] = "{\"file\":null}";
+                    result[0] = Json.object()
+                            .put("file", (String) null).toString();
                     return;
                 }
 
@@ -52,14 +53,15 @@ class EditorHandler {
                 }
 
                 if (file != null) {
-                    result[0] = "{\"file\":\"" + HttpServer.escapeJson(file)
-                            + "\",\"line\":" + line + "}";
+                    result[0] = Json.object()
+                            .put("file", file)
+                            .put("line", line).toString();
                 } else {
-                    result[0] = "{\"file\":null}";
+                    result[0] = Json.object()
+                            .put("file", (String) null).toString();
                 }
             } catch (Exception e) {
-                result[0] = "{\"error\":\""
-                        + HttpServer.escapeJson(e.getMessage()) + "\"}";
+                result[0] = Json.error(e.getMessage());
             }
         });
         return result[0];
@@ -70,46 +72,36 @@ class EditorHandler {
         String methodName = params.get("method");
 
         if (fqn == null || fqn.isBlank()) {
-            return "{\"error\":\"Missing 'class' parameter\"}";
+            return Json.error("Missing 'class' parameter");
         }
 
-        IType type = findType(fqn);
+        IType type = JdtUtils.findType(fqn);
         if (type == null) {
-            return "{\"error\":\"Type not found: "
-                    + HttpServer.escapeJson(fqn) + "\"}";
+            return Json.error("Type not found: " + fqn);
         }
 
         IJavaElement target = type;
         if (methodName != null && !methodName.isBlank()) {
-            for (IMethod m : type.getMethods()) {
-                if (m.getElementName().equals(methodName)) {
-                    target = m;
-                    break;
-                }
+            int arity = JdtUtils.parseArity(params.get("arity"));
+            IMethod method =
+                    JdtUtils.findMethod(type, methodName, arity);
+            if (method != null) {
+                target = method;
             }
         }
 
         final IJavaElement element = target;
-        String[] result = new String[1];
+        String[] result = {Json.error("Failed to open editor")};
         Display.getDefault().syncExec(() -> {
             try {
                 IEditorPart editor = JavaUI.openInEditor(element);
                 JavaUI.revealInEditor(editor, element);
-                result[0] = "{\"ok\":true}";
+                result[0] = Json.object()
+                        .put("ok", true).toString();
             } catch (Exception e) {
-                result[0] = "{\"error\":\""
-                        + HttpServer.escapeJson(e.getMessage()) + "\"}";
+                result[0] = Json.error(e.getMessage());
             }
         });
         return result[0];
-    }
-
-    private IType findType(String fqn) throws JavaModelException {
-        var model = JavaCore.create(ResourcesPlugin.getWorkspace().getRoot());
-        for (IJavaProject project : model.getJavaProjects()) {
-            IType type = project.findType(fqn);
-            if (type != null && type.exists()) return type;
-        }
-        return null;
     }
 }

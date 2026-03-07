@@ -65,8 +65,9 @@ public class TestHandlerTest {
 
     @Test
     public void detectTestKindJunit4() throws Exception {
-        // test.model.Dog has no JUnit 5 on classpath → should return JUnit 4
-        String kind = invokeDetectTestKind("test.model.Dog");
+        // test.model.Dog has no JUnit 5 on classpath → JUnit 4
+        Object type = invokeFindType("test.model.Dog");
+        String kind = invokeDetectTestKind(type);
         assertEquals("org.eclipse.jdt.junit.loader.junit4", kind);
     }
 
@@ -87,13 +88,21 @@ public class TestHandlerTest {
 
     // ---- Reflection helpers ----
 
-    private String invokeDetectTestKind(String fqn) {
+    private Object invokeFindType(String fqn) {
         try {
-            var findType = TestHandler.class
+            Class<?> clazz = Class.forName(
+                    "io.github.kaluchi.jdtbridge.JdtUtils");
+            var method = clazz
                     .getDeclaredMethod("findType", String.class);
-            findType.setAccessible(true);
-            var type = findType.invoke(handler, fqn);
+            method.setAccessible(true);
+            return method.invoke(null, fqn);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
+    private String invokeDetectTestKind(Object type) {
+        try {
             var method = TestHandler.class
                     .getDeclaredMethod("detectTestKind",
                             org.eclipse.jdt.core.IType.class);

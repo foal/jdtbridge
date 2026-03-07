@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URLDecoder;
@@ -14,21 +15,25 @@ import java.util.Map;
 /**
  * Minimal HTTP server on a raw ServerSocket.
  * Handles GET requests, parses path + query params, dispatches to handlers.
+ * Binds to loopback only — not reachable from the network.
  */
 public class HttpServer {
 
     private final SearchHandler search = new SearchHandler();
-    private final DiagnosticsHandler diagnostics = new DiagnosticsHandler();
-    private final RefactoringHandler refactoring = new RefactoringHandler();
+    private final DiagnosticsHandler diagnostics =
+            new DiagnosticsHandler();
+    private final RefactoringHandler refactoring =
+            new RefactoringHandler();
     private final EditorHandler editor = new EditorHandler();
-    private final TestHandler test = new TestHandler();
+    private final TestHandler testHandler = new TestHandler();
     private final ProjectHandler projectInfo = new ProjectHandler();
     private volatile ServerSocket serverSocket;
     private volatile boolean running;
     private volatile String token;
 
     /** Response with content type, optional headers, and body. */
-    record Response(String contentType, Map<String, String> headers, String body) {
+    record Response(String contentType, Map<String, String> headers,
+            String body) {
         static Response json(String json) {
             return new Response("application/json", Map.of(), json);
         }
@@ -39,9 +44,10 @@ public class HttpServer {
     }
 
     public void start() throws IOException {
-        serverSocket = new ServerSocket(0);
+        serverSocket = new ServerSocket(
+                0, 50, InetAddress.getLoopbackAddress());
         running = true;
-        Thread t = new Thread(this::acceptLoop, "jdt-search-http");
+        Thread t = new Thread(this::acceptLoop, "jdt-bridge-http");
         t.setDaemon(true);
         t.start();
     }
@@ -59,19 +65,20 @@ public class HttpServer {
         running = false;
         try {
             if (serverSocket != null) serverSocket.close();
-        } catch (IOException e) { /* ignore */ }
+        } catch (IOException e) { /* expected on shutdown */ }
     }
 
     private void acceptLoop() {
         while (running) {
             try {
                 Socket socket = serverSocket.accept();
-                Thread handler = new Thread(() -> handle(socket), "jdt-search-req");
+                Thread handler = new Thread(
+                        () -> handle(socket), "jdt-bridge-req");
                 handler.setDaemon(true);
                 handler.start();
             } catch (IOException e) {
                 if (running) {
-                    System.err.println("[jdt-search] Accept error: " + e.getMessage());
+                    Log.error("Accept error", e);
                 }
             }
         }
@@ -79,8 +86,11 @@ public class HttpServer {
 
     private void handle(Socket socket) {
         try (socket) {
+            socket.setSoTimeout(30_000);
             BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                    new InputStreamReader(
+                            socket.getInputStream(),
+                            StandardCharsets.UTF_8));
             String requestLine = reader.readLine();
             if (requestLine == null) return;
 
@@ -121,61 +131,82 @@ public class HttpServer {
             }
 
             Response resp = dispatch(path, params);
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("HTTP/1.1 200 OK\r\n");
-            sb.append("Content-Type: ").append(resp.contentType)
-                    .append("; charset=utf-8\r\n");
-            sb.append("Connection: close\r\n");
-            for (var entry : resp.headers.entrySet()) {
-                sb.append(entry.getKey()).append(": ")
-                        .append(entry.getValue()).append("\r\n");
-            }
-            sb.append("\r\n");
-
-            OutputStream out = socket.getOutputStream();
-            out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-            out.write(resp.body.getBytes(StandardCharsets.UTF_8));
-            out.flush();
+            sendResponse(socket, resp);
         } catch (Exception e) {
-            System.err.println("[jdt-search] Request error: " + e.getMessage());
+            Log.error("Request error", e);
         }
+    }
+
+    private void sendResponse(Socket socket, Response resp)
+            throws IOException {
+        byte[] bodyBytes = resp.body().getBytes(StandardCharsets.UTF_8);
+        StringBuilder header = new StringBuilder();
+        header.append("HTTP/1.1 200 OK\r\n");
+        header.append("Content-Type: ").append(resp.contentType())
+                .append("; charset=utf-8\r\n");
+        header.append("Content-Length: ")
+                .append(bodyBytes.length).append("\r\n");
+        header.append("Connection: close\r\n");
+        for (var entry : resp.headers().entrySet()) {
+            header.append(entry.getKey()).append(": ")
+                    .append(entry.getValue()).append("\r\n");
+        }
+        header.append("\r\n");
+
+        OutputStream out = socket.getOutputStream();
+        out.write(header.toString().getBytes(StandardCharsets.UTF_8));
+        out.write(bodyBytes);
+        out.flush();
     }
 
     private Response dispatch(String path, Map<String, String> params) {
         try {
             return switch (path) {
-                case "/projects" -> Response.json(search.handleProjects());
+                case "/projects" -> Response.json(
+                        search.handleProjects());
                 case "/project-info" -> Response.json(
                         projectInfo.handleProjectInfo(params));
-                case "/find" -> Response.json(search.handleFind(params));
-                case "/references" -> Response.json(search.handleReferences(params));
-                case "/subtypes" -> Response.json(search.handleSubtypes(params));
-                case "/hierarchy" -> Response.json(search.handleHierarchy(params));
+                case "/find" -> Response.json(
+                        search.handleFind(params));
+                case "/references" -> Response.json(
+                        search.handleReferences(params));
+                case "/subtypes" -> Response.json(
+                        search.handleSubtypes(params));
+                case "/hierarchy" -> Response.json(
+                        search.handleHierarchy(params));
                 case "/implementors" -> Response.json(
                         search.handleImplementors(params));
-                case "/errors" -> Response.json(diagnostics.handleErrors(params));
-                case "/type-info" -> Response.json(search.handleTypeInfo(params));
+                case "/errors" -> Response.json(
+                        diagnostics.handleErrors(params));
+                case "/type-info" -> Response.json(
+                        search.handleTypeInfo(params));
                 case "/source" -> search.handleSource(params);
                 case "/organize-imports" -> Response.json(
                         refactoring.handleOrganizeImports(params));
-                case "/format" -> Response.json(refactoring.handleFormat(params));
-                case "/rename" -> Response.json(refactoring.handleRename(params));
-                case "/move" -> Response.json(refactoring.handleMove(params));
-                case "/test" -> Response.json(test.handleTest(params));
+                case "/format" -> Response.json(
+                        refactoring.handleFormat(params));
+                case "/rename" -> Response.json(
+                        refactoring.handleRename(params));
+                case "/move" -> Response.json(
+                        refactoring.handleMove(params));
+                case "/test" -> Response.json(
+                        testHandler.handleTest(params));
                 case "/active-editor" -> Response.json(
                         editor.handleActiveEditor(params));
-                case "/open" -> Response.json(editor.handleOpen(params));
-                default -> Response.json(
-                        "{\"error\":\"Unknown path: " + escapeJson(path) + "\"}");
+                case "/open" -> Response.json(
+                        editor.handleOpen(params));
+                default -> Response.json(Json.error(
+                        "Unknown path: " + path));
             };
         } catch (Exception e) {
-            return Response.json(
-                    "{\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+            Log.error("Handler error on " + path, e);
+            String msg = e.getMessage();
+            return Response.json(Json.error(
+                    msg != null ? msg : e.getClass().getSimpleName()));
         }
     }
 
-    private static Map<String, String> parseQuery(String query) {
+    static Map<String, String> parseQuery(String query) {
         Map<String, String> params = new LinkedHashMap<>();
         for (String pair : query.split("&")) {
             int eq = pair.indexOf('=');
@@ -186,7 +217,8 @@ public class HttpServer {
                         pair.substring(eq + 1), StandardCharsets.UTF_8);
                 params.put(key, val);
             } else if (!pair.isBlank()) {
-                params.put(URLDecoder.decode(pair, StandardCharsets.UTF_8), "");
+                params.put(URLDecoder.decode(
+                        pair, StandardCharsets.UTF_8), "");
             }
         }
         return params;
@@ -194,38 +226,23 @@ public class HttpServer {
 
     private void sendError(Socket socket, int code, String message)
             throws IOException {
-        String body = "{\"error\":\"" + escapeJson(message) + "\"}";
-        String resp = "HTTP/1.1 " + code + " " + message + "\r\n"
+        String body = Json.error(message);
+        byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+        String header = "HTTP/1.1 " + code + " " + message + "\r\n"
                 + "Content-Type: application/json; charset=utf-8\r\n"
-                + "Connection: close\r\n\r\n" + body;
+                + "Content-Length: " + bodyBytes.length + "\r\n"
+                + "Connection: close\r\n\r\n";
         OutputStream out = socket.getOutputStream();
-        out.write(resp.getBytes(StandardCharsets.UTF_8));
+        out.write(header.getBytes(StandardCharsets.UTF_8));
+        out.write(bodyBytes);
         out.flush();
     }
 
-    /** JSON string escaping — handles all control characters per RFC 8259. */
+    /**
+     * JSON string escaping — delegates to {@link Json#escape(String)}.
+     * Kept for backward compatibility with tests.
+     */
     static String escapeJson(String s) {
-        if (s == null) return "null";
-        StringBuilder sb = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"' -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                case '\b' -> sb.append("\\b");
-                case '\f' -> sb.append("\\f");
-                default -> {
-                    if (c < 0x20) {
-                        sb.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        sb.append(c);
-                    }
-                }
-            }
-        }
-        return sb.toString();
+        return Json.escape(s);
     }
 }

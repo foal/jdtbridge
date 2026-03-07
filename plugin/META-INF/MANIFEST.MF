@@ -1,6 +1,7 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Name: JDT Search HTTP Server
+Bundle-Name: JDT Bridge
+Bundle-Vendor: kaluchi
 Bundle-SymbolicName: io.github.kaluchi.jdtbridge;singleton:=true
 Bundle-Version: 1.0.0.qualifier
 Bundle-Activator: io.github.kaluchi.jdtbridge.Activator
