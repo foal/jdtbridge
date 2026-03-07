@@ -18,6 +18,7 @@ import {
   getInstalledVersion,
   stopEclipse,
   startEclipse,
+  getEclipseJavaHome,
   p2Install,
   p2Uninstall,
 } from "../eclipse.mjs";
@@ -240,9 +241,14 @@ async function runInstall(config, flags) {
 
   if (!flags["skip-build"]) {
     generateTargetPlatform(repoRoot, eclipsePath);
+    const javaHome = getEclipseJavaHome(eclipsePath);
+    const mvnEnv = javaHome
+      ? { ...process.env, JAVA_HOME: javaHome }
+      : process.env;
+    if (javaHome) info(`JAVA_HOME: ${javaHome}`);
     const mvnCmd = flags.clean ? "mvn clean verify" : "mvn verify";
     try {
-      execSync(mvnCmd, { cwd: repoRoot, stdio: "inherit", timeout: 300_000 });
+      execSync(mvnCmd, { cwd: repoRoot, stdio: "inherit", timeout: 300_000, env: mvnEnv });
     } catch {
       console.error("\n  Build failed.");
       process.exit(1);

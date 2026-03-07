@@ -12,6 +12,7 @@ import {
   detectProfile,
   getInstalledVersion,
   findEclipsePath,
+  getEclipseJavaHome,
 } from "../src/eclipse.mjs";
 
 const IS_WIN = process.platform === "win32";
@@ -166,6 +167,32 @@ describe("eclipse", () => {
       // On a machine without Eclipse in standard paths, returns null
       // We can't assert null because Eclipse might be installed
       expect(typeof result === "string" || result === null).toBe(true);
+    });
+  });
+
+  describe("getEclipseJavaHome", () => {
+    it("returns null when eclipse.ini is missing", () => {
+      expect(getEclipseJavaHome(testDir)).toBeNull();
+    });
+
+    it("returns null when no -vm entry", () => {
+      writeFileSync(
+        join(testDir, "eclipse.ini"),
+        "-startup\nplugins/org.eclipse.equinox.launcher.jar\n-vmargs\n-Xmx2g\n",
+      );
+      expect(getEclipseJavaHome(testDir)).toBeNull();
+    });
+
+    it("extracts JRE home from -vm pointing to bin dir", () => {
+      const jreBin = join(testDir, "plugins", "justj", "jre", "bin");
+      mkdirSync(jreBin, { recursive: true });
+      writeFileSync(
+        join(testDir, "eclipse.ini"),
+        `-startup\nplugins/launcher.jar\n-vm\nplugins/justj/jre/bin\n-vmargs\n-Xmx2g\n`,
+      );
+      const result = getEclipseJavaHome(testDir);
+      expect(result).toContain("jre");
+      expect(result).not.toContain("bin");
     });
   });
 });

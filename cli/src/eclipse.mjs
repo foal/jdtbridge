@@ -2,7 +2,7 @@
 
 import { execSync, spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, dirname } from "node:path";
 
 const IS_WIN = process.platform === "win32";
 
@@ -62,6 +62,29 @@ export function getEclipseVersion(eclipsePath) {
   if (!existsSync(f)) return null;
   const m = readFileSync(f, "utf8").match(/version=(\S+)/);
   return m ? m[1] : null;
+}
+
+/**
+ * Extract JAVA_HOME from eclipse.ini (-vm entry).
+ * Returns absolute path to JDK/JRE home, or null if not found.
+ */
+export function getEclipseJavaHome(eclipsePath) {
+  const iniFile = join(eclipsePath, "eclipse.ini");
+  if (!existsSync(iniFile)) return null;
+  const lines = readFileSync(iniFile, "utf8").split(/\r?\n/);
+  const vmIndex = lines.indexOf("-vm");
+  if (vmIndex === -1 || vmIndex + 1 >= lines.length) return null;
+  const vmPath = lines[vmIndex + 1].trim();
+  // -vm points to a bin/ dir or a javaw.exe — resolve to JRE/JDK home
+  const resolved = resolve(eclipsePath, vmPath);
+  // e.g. plugins/.../jre/bin → go up to jre (or jdk root)
+  if (resolved.endsWith("bin") || resolved.endsWith("bin/") || resolved.endsWith("bin\\")) {
+    const parent = dirname(resolved);
+    // If parent is "jre", go one more level up for JDK home
+    return parent;
+  }
+  // If it points to an executable, go up two levels (bin/java.exe → jre)
+  return dirname(dirname(resolved));
 }
 
 /** Detect the p2 profile name from the profile registry. */
