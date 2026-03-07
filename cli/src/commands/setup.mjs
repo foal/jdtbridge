@@ -20,6 +20,7 @@ import {
   startEclipse,
   getEclipseJavaHome,
   generateTargetPlatform,
+  waitForBridge,
   p2Install,
   p2Uninstall,
 } from "../eclipse.mjs";
@@ -290,6 +291,13 @@ async function runInstall(config, flags) {
   if (wasRunning) {
     const pid = startEclipse(eclipsePath, workspace);
     info(`Eclipse started (PID ${pid})`);
+    info("Waiting for bridge...");
+    try {
+      const { port, projects } = await waitForBridge(discoverInstances, pid);
+      ok(`Bridge ready on port ${port} (${projects.length} projects)`);
+    } catch {
+      fail("Bridge did not start (Eclipse may still be loading)");
+    }
   } else {
     info("Start Eclipse to activate the plugin.");
   }

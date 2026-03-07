@@ -3,6 +3,7 @@
 import { execSync, spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
+import { request } from "node:http";
 
 const IS_WIN = process.platform === "win32";
 
@@ -225,4 +226,60 @@ export function p2Install(eclipsePath, profile, repoPath, featureIU) {
 /** Uninstall a feature via p2 director. */
 export function p2Uninstall(eclipsePath, profile, featureIU) {
   return runDirector(eclipsePath, profile, ["-uninstallIU", featureIU]);
+}
+
+/**
+ * Wait for a bridge instance file with the given PID to appear,
+ * then hit /projects as a health check.
+ * @param {Function} discoverFn - discoverInstances function
+ * @param {number} pid - PID of the Eclipse process to wait for
+ * @param {number} [timeoutSec=120] - max seconds to wait
+ * @returns {Promise<{port: number, projects: string[]}>} port and project list
+ */
+export function waitForBridge(discoverFn, pid, timeoutSec = 120) {
+  const deadline = Date.now() + timeoutSec * 1000;
+
+  return new Promise((resolve, reject) => {
+    function poll() {
+      if (Date.now() > deadline) {
+        reject(new Error("Timed out waiting for bridge"));
+        return;
+      }
+      const instances = discoverFn();
+      const inst = instances.find((i) => i.pid === pid);
+      if (!inst) {
+        setTimeout(poll, 2000);
+        return;
+      }
+      // Instance found — health check via /projects
+      healthCheck(inst.port, inst.token)
+        .then((projects) => resolve({ port: inst.port, projects }))
+        .catch(() => setTimeout(poll, 2000));
+    }
+    poll();
+  });
+}
+
+function healthCheck(port, token) {
+  return new Promise((resolve, reject) => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const req = request(
+      { hostname: "127.0.0.1", port, path: "/projects", timeout: 5000, headers },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          if (res.statusCode !== 200) {
+            reject(new Error(`HTTP ${res.statusCode}`));
+            return;
+          }
+          try { resolve(JSON.parse(data)); }
+          catch { reject(new Error("Invalid JSON")); }
+        });
+      },
+    );
+    req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
+    req.on("error", reject);
+    req.end();
+  });
 }
