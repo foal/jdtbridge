@@ -10,7 +10,7 @@
       over HTTP for use by AI coding assistants and CLI tools.
 
       Starts an HTTP server on a random port at Eclipse startup.
-      Connection details are written to ~/.jdt-bridge (port, auth token, PID, workspace).
+      Connection details are written to ~/.jdtbridge (port, auth token, PID, workspace).
    </description>
 
    <copyright>

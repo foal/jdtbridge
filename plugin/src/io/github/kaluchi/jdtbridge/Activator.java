@@ -11,7 +11,7 @@ import org.osgi.framework.BundleContext;
 
 public class Activator implements BundleActivator {
 
-    private static final String BRIDGE_FILE = ".jdt-bridge";
+    private static final String BRIDGE_FILE = ".jdtbridge";
     private static final int TOKEN_BYTES = 16;
 
     private HttpServer server;
