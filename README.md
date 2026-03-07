@@ -40,7 +40,7 @@ Alternatively, delegate to an AI coding agent (e.g. Claude Code) — it can clon
 
 ### Target platform
 
-The file `jdtbridge.target` points to a local Eclipse directory (default `D:\eclipse`). If your Eclipse is installed elsewhere, update the `<location path="...">` in that file before running `jdt setup`.
+`jdt setup` automatically generates `jdtbridge.target` pointing to the discovered Eclipse installation. This file is machine-specific and excluded from git.
 
 ### Updating
 

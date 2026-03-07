@@ -5,3 +5,4 @@ bin/
 .classpath
 .project
 node_modules/
+jdtbridge.target
