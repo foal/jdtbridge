@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.IType;
@@ -64,6 +66,22 @@ class JdtUtils {
         if (type.isEnum()) return "enum";
         if (type.isInterface()) return "interface";
         return "class";
+    }
+
+    /**
+     * Wait for Eclipse auto-build to finish, with a 2-minute
+     * safety timeout to prevent indefinite hangs.
+     */
+    static void joinAutoBuild() throws InterruptedException {
+        NullProgressMonitor monitor = new NullProgressMonitor();
+        Thread.startVirtualThread(() -> {
+            try {
+                Thread.sleep(120_000);
+            } catch (InterruptedException e) { /* ok */ }
+            monitor.setCanceled(true);
+        });
+        Job.getJobManager().join(
+                ResourcesPlugin.FAMILY_AUTO_BUILD, monitor);
     }
 
     static String compactSignature(IMethod m) throws JavaModelException {

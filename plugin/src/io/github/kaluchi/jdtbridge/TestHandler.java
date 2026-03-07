@@ -197,9 +197,7 @@ class TestHandler {
                     org.eclipse.core.resources.IResource
                             .DEPTH_INFINITE,
                     new NullProgressMonitor());
-            org.eclipse.core.runtime.jobs.Job.getJobManager().join(
-                    ResourcesPlugin.FAMILY_AUTO_BUILD,
-                    new NullProgressMonitor());
+            JdtUtils.joinAutoBuild();
         }
     }
 

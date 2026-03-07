@@ -83,8 +83,7 @@ class DiagnosticsHandler {
                         null);
             }
         } else if (refresh) {
-            Job.getJobManager().join(
-                    ResourcesPlugin.FAMILY_AUTO_BUILD, null);
+            JdtUtils.joinAutoBuild();
         }
 
         // Read markers

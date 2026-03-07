@@ -1,9 +1,14 @@
 package io.github.kaluchi.jdtbridge;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Set;
 
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.osgi.framework.BundleActivator;
@@ -11,7 +16,8 @@ import org.osgi.framework.BundleContext;
 
 public class Activator implements BundleActivator {
 
-    private static final String BRIDGE_FILE = ".jdtbridge";
+    private static final String HOME_DIR = ".jdtbridge";
+    private static final String INSTANCES_DIR = "instances";
     private static final int TOKEN_BYTES = 16;
 
     private HttpServer server;
@@ -43,17 +49,62 @@ public class Activator implements BundleActivator {
 
     private void writeBridgeFile(int port, String token)
             throws IOException {
-        bridgeFile = Path.of(System.getProperty("user.home"),
-                BRIDGE_FILE);
         String workspace = ResourcesPlugin.getWorkspace().getRoot()
                 .getLocation().toOSString();
         long pid = ProcessHandle.current().pid();
 
-        String content = "port=" + port + "\n"
-                + "token=" + token + "\n"
-                + "pid=" + pid + "\n"
-                + "workspace=" + workspace + "\n";
+        Path homeDir = resolveHome();
+        Path instancesDir = homeDir.resolve(INSTANCES_DIR);
+        Files.createDirectories(instancesDir);
+
+        String hash = workspaceHash(workspace);
+        bridgeFile = instancesDir.resolve(hash + ".json");
+
+        String content = Json.object()
+                .put("port", port)
+                .put("token", token)
+                .put("pid", pid)
+                .put("workspace", workspace)
+                .toString() + "\n";
+
         Files.writeString(bridgeFile, content);
+        setPosixOwnerOnly(bridgeFile);
+        setPosixOwnerOnly(instancesDir);
+    }
+
+    private static Path resolveHome() {
+        String env = System.getenv("JDTBRIDGE_HOME");
+        if (env != null && !env.isEmpty()) {
+            return Path.of(env);
+        }
+        return Path.of(System.getProperty("user.home"), HOME_DIR);
+    }
+
+    private static void setPosixOwnerOnly(Path path) {
+        try {
+            Files.setPosixFilePermissions(path, Set.of(
+                    PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE,
+                    PosixFilePermission.OWNER_EXECUTE));
+        } catch (UnsupportedOperationException e) {
+            // Windows — POSIX permissions not available
+        } catch (IOException e) {
+            Log.warn("Failed to set permissions on " + path, e);
+        }
+    }
+
+    static String workspaceHash(String workspace) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(workspace.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(12);
+            for (int i = 0; i < 6; i++) {
+                sb.append(String.format("%02x", digest[i] & 0xff));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void deleteBridgeFile() {

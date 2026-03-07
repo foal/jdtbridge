@@ -127,7 +127,7 @@ class Json {
     }
 
     private void appendKey(String key) {
-        sb.append('"').append(key).append("\":");
+        sb.append('"').append(escape(key)).append("\":");
     }
 
     /** JSON string escaping — handles all control characters per RFC 8259. */

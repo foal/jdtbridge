@@ -11,6 +11,9 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Minimal HTTP server on a raw ServerSocket.
@@ -27,6 +30,12 @@ public class HttpServer {
     private final EditorHandler editor = new EditorHandler();
     private final TestHandler testHandler = new TestHandler();
     private final ProjectHandler projectInfo = new ProjectHandler();
+    private final ExecutorService executor =
+            Executors.newFixedThreadPool(4, r -> {
+                Thread t = new Thread(r, "jdt-bridge-req");
+                t.setDaemon(true);
+                return t;
+            });
     private volatile ServerSocket serverSocket;
     private volatile boolean running;
     private volatile String token;
@@ -66,16 +75,19 @@ public class HttpServer {
         try {
             if (serverSocket != null) serverSocket.close();
         } catch (IOException e) { /* expected on shutdown */ }
+        executor.shutdownNow();
+        try {
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void acceptLoop() {
         while (running) {
             try {
                 Socket socket = serverSocket.accept();
-                Thread handler = new Thread(
-                        () -> handle(socket), "jdt-bridge-req");
-                handler.setDaemon(true);
-                handler.start();
+                executor.submit(() -> handle(socket));
             } catch (IOException e) {
                 if (running) {
                     Log.error("Accept error", e);

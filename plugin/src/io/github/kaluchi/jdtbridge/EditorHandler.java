@@ -95,7 +95,9 @@ class EditorHandler {
         Display.getDefault().syncExec(() -> {
             try {
                 IEditorPart editor = JavaUI.openInEditor(element);
-                JavaUI.revealInEditor(editor, element);
+                if (editor != null) {
+                    JavaUI.revealInEditor(editor, element);
+                }
                 result[0] = Json.object()
                         .put("ok", true).toString();
             } catch (Exception e) {

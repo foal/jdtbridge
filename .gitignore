@@ -1,5 +1,7 @@
 target/
 bin/
+!cli/bin/
 .settings/
 .classpath
 .project
+node_modules/

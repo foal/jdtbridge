@@ -292,6 +292,16 @@ class RefactoringHandler {
             change.dispose();
         }
 
-        return Json.object().put("ok", true).toString();
+        Json result = Json.object().put("ok", true);
+        if (status.hasWarning()) {
+            Json warnings = Json.array();
+            for (var entry : status.getEntries()) {
+                if (entry.isWarning()) {
+                    warnings.add(entry.getMessage());
+                }
+            }
+            result.put("warnings", warnings);
+        }
+        return result.toString();
     }
 }
