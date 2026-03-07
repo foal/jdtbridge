@@ -22,6 +22,7 @@ public class HttpServer {
     private final DiagnosticsHandler diagnostics = new DiagnosticsHandler();
     private final RefactoringHandler refactoring = new RefactoringHandler();
     private final EditorHandler editor = new EditorHandler();
+    private final TestHandler test = new TestHandler();
     private volatile ServerSocket serverSocket;
     private volatile boolean running;
 
@@ -132,6 +133,7 @@ public class HttpServer {
                 case "/format" -> Response.json(refactoring.handleFormat(params));
                 case "/rename" -> Response.json(refactoring.handleRename(params));
                 case "/move" -> Response.json(refactoring.handleMove(params));
+                case "/test" -> Response.json(test.handleTest(params));
                 case "/active-editor" -> Response.json(
                         editor.handleActiveEditor(params));
                 case "/open" -> Response.json(editor.handleOpen(params));

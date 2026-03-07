@@ -21,7 +21,7 @@ class DiagnosticsHandler {
     String handleErrors(Map<String, String> params) throws Exception {
         String filePath = params.get("file");
         String projectName = params.get("project");
-        boolean refresh = params.containsKey("refresh");
+        boolean refresh = !params.containsKey("no-refresh");
         boolean build = params.containsKey("build");
         boolean clean = params.containsKey("clean");
         boolean includeWarnings = params.containsKey("warnings");
