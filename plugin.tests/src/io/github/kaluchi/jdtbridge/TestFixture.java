@@ -91,6 +91,157 @@ class TestFixture {
             }
             """;
 
+    // ---- Edge case types ----
+
+    private static final String OVERLOADED_SRC = """
+            package test.edge;
+
+            public class Calculator {
+                public int add(int a, int b) {
+                    return a + b;
+                }
+
+                public double add(double a, double b) {
+                    return a + b;
+                }
+
+                public int add(int a, int b, int c) {
+                    return a + b + c;
+                }
+            }
+            """;
+
+    private static final String INNER_SRC = """
+            package test.edge;
+
+            public class Outer {
+                private String name;
+
+                public class Inner {
+                    public String getOuterName() {
+                        return name;
+                    }
+                }
+
+                public static class StaticNested {
+                    public static final int VALUE = 42;
+                }
+            }
+            """;
+
+    private static final String ENUM_SRC = """
+            package test.edge;
+
+            public enum Color {
+                RED, GREEN, BLUE;
+
+                public String lower() {
+                    return name().toLowerCase();
+                }
+            }
+            """;
+
+    private static final String ANNOTATION_SRC = """
+            package test.edge;
+
+            import java.lang.annotation.Retention;
+            import java.lang.annotation.RetentionPolicy;
+
+            @Retention(RetentionPolicy.RUNTIME)
+            public @interface Marker {
+                String value() default "";
+            }
+            """;
+
+    private static final String ABSTRACT_SRC = """
+            package test.edge;
+
+            import test.model.Animal;
+
+            public abstract class AbstractPet implements Animal {
+                protected final String petName;
+
+                protected AbstractPet(String petName) {
+                    this.petName = petName;
+                }
+
+                @Override
+                public String name() {
+                    return petName;
+                }
+
+                public abstract void speak();
+            }
+            """;
+
+    private static final String CONCRETE_PET_SRC = """
+            package test.edge;
+
+            public class Parrot extends AbstractPet {
+                public Parrot() {
+                    super("Polly");
+                }
+
+                @Override
+                public void speak() {
+                    System.out.println("Hello!");
+                }
+            }
+            """;
+
+    // ---- Refactoring targets (separate classes that can be renamed/moved) ----
+
+    private static final String RENAME_TARGET_SRC = """
+            package test.refactor;
+
+            public class RenameTarget {
+                private int counter;
+
+                public int getCounter() {
+                    return counter;
+                }
+
+                public void increment() {
+                    counter++;
+                }
+            }
+            """;
+
+    private static final String RENAME_CALLER_SRC = """
+            package test.refactor;
+
+            public class RenameCaller {
+                public void use() {
+                    RenameTarget t = new RenameTarget();
+                    t.increment();
+                    int c = t.getCounter();
+                }
+            }
+            """;
+
+    private static final String FORMAT_TARGET_SRC = """
+            package test.refactor;
+
+            public class FormatTarget {
+            public    void   messy(  )  {
+                    int x=1+2;
+            String s  ="hello";
+            }
+            }
+            """;
+
+    private static final String IMPORT_TARGET_SRC = """
+            package test.refactor;
+
+            import java.util.List;
+            import java.util.Map;
+            import java.util.Set;
+
+            public class ImportTarget {
+                List<String> items;
+            }
+            """;
+
     static void create() throws Exception {
         IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
         IProject project = root.getProject(PROJECT_NAME);
@@ -121,6 +272,10 @@ class TestFixture {
         javaProject.setRawClasspath(
                 new IClasspathEntry[] { srcEntry, jreEntry }, null);
 
+        // Initialize project preferences (needed by refactoring APIs)
+        javaProject.setOption(JavaCore.COMPILER_SOURCE, "21");
+        javaProject.setOption(JavaCore.COMPILER_COMPLIANCE, "21");
+
         // Create packages and source files
         IPackageFragmentRoot srcRoot =
                 javaProject.getPackageFragmentRoot(srcFolder);
@@ -141,6 +296,34 @@ class TestFixture {
                 srcRoot.createPackageFragment("test.broken", true, null);
         brokenPkg.createCompilationUnit(
                 "BrokenClass.java", BROKEN_SRC, true, null);
+
+        // Edge case types
+        IPackageFragment edgePkg =
+                srcRoot.createPackageFragment("test.edge", true, null);
+        edgePkg.createCompilationUnit(
+                "Calculator.java", OVERLOADED_SRC, true, null);
+        edgePkg.createCompilationUnit(
+                "Outer.java", INNER_SRC, true, null);
+        edgePkg.createCompilationUnit(
+                "Color.java", ENUM_SRC, true, null);
+        edgePkg.createCompilationUnit(
+                "Marker.java", ANNOTATION_SRC, true, null);
+        edgePkg.createCompilationUnit(
+                "AbstractPet.java", ABSTRACT_SRC, true, null);
+        edgePkg.createCompilationUnit(
+                "Parrot.java", CONCRETE_PET_SRC, true, null);
+
+        // Refactoring targets
+        IPackageFragment refactorPkg =
+                srcRoot.createPackageFragment("test.refactor", true, null);
+        refactorPkg.createCompilationUnit(
+                "RenameTarget.java", RENAME_TARGET_SRC, true, null);
+        refactorPkg.createCompilationUnit(
+                "RenameCaller.java", RENAME_CALLER_SRC, true, null);
+        refactorPkg.createCompilationUnit(
+                "FormatTarget.java", FORMAT_TARGET_SRC, true, null);
+        refactorPkg.createCompilationUnit(
+                "ImportTarget.java", IMPORT_TARGET_SRC, true, null);
 
         // Wait for auto-build to finish
         Job.getJobManager().join(

@@ -329,9 +329,9 @@ class SearchHandler {
         sb.append("\"fqn\":\"").append(HttpServer.escapeJson(type.getFullyQualifiedName())).append("\"");
 
         String kind;
-        if (type.isInterface()) kind = "interface";
+        if (type.isAnnotation()) kind = "annotation";
         else if (type.isEnum()) kind = "enum";
-        else if (type.isAnnotation()) kind = "annotation";
+        else if (type.isInterface()) kind = "interface";
         else kind = "class";
         sb.append(",\"kind\":\"").append(kind).append("\"");
 

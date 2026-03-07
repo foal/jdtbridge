@@ -229,9 +229,9 @@ class ProjectHandler {
     }
 
     private static String typeKind(IType type) throws JavaModelException {
-        if (type.isInterface()) return "interface";
-        if (type.isEnum()) return "enum";
         if (type.isAnnotation()) return "annotation";
+        if (type.isEnum()) return "enum";
+        if (type.isInterface()) return "interface";
         return "class";
     }
 
