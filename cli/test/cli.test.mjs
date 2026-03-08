@@ -54,4 +54,21 @@ describe("cli dispatcher", () => {
     await run(["help", "nonexistent"]);
     expect(errors.some((l) => l.includes("Unknown command: nonexistent"))).toBe(true);
   });
+
+  it("resolves alias in help", async () => {
+    await run(["help", "refs"]);
+    expect(logs.some((l) => l.includes("references"))).toBe(true);
+  });
+
+  it("shows aliases in overview", async () => {
+    await run(["--help"]);
+    const output = logs.join("\n");
+    expect(output).toContain("refs");
+    expect(output).toContain("impl");
+    expect(output).toContain("subt");
+    expect(output).toContain("hier");
+    expect(output).toContain("src");
+    expect(output).toContain("err");
+    expect(output).toContain("fmt");
+  });
 });

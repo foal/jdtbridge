@@ -30,7 +30,7 @@ import {
 } from "./commands/editor.mjs";
 import { setup, help as setupHelp } from "./commands/setup.mjs";
 import { isConnectionError } from "./client.mjs";
-import { bold, red } from "./color.mjs";
+import { bold, red, dim } from "./color.mjs";
 
 const commands = {
   projects: { fn: projects, help: projectsHelp },
@@ -53,36 +53,68 @@ const commands = {
   setup: { fn: setup, help: setupHelp },
 };
 
+/** Short aliases for frequently used commands. */
+const aliases = {
+  refs: "references",
+  impl: "implementors",
+  subt: "subtypes",
+  hier: "hierarchy",
+  pi: "project-info",
+  ti: "type-info",
+  oi: "organize-imports",
+  ae: "active-editor",
+  src: "source",
+  err: "errors",
+  fmt: "format",
+};
+
+// Reverse map: command name → list of its aliases (for display).
+const aliasesOf = {};
+for (const [short, full] of Object.entries(aliases)) {
+  (aliasesOf[full] ||= []).push(short);
+}
+
+/** Resolve a command name or alias to its full name. */
+function resolve(name) {
+  if (commands[name]) return name;
+  return aliases[name] || null;
+}
+
+function fmtAliases(name) {
+  const list = aliasesOf[name];
+  return list ? " " + dim("(" + list.join(", ") + ")") : "";
+}
+
 function printOverview() {
   console.log(`Eclipse JDT Bridge — semantic Java analysis via Eclipse JDT SearchEngine.
 Requires: Eclipse running with the jdtbridge plugin.
 
 Search & navigation:
   projects                                    list workspace projects
-  project-info <name> [--lines N]             project overview (adaptive detail)
+  project-info${fmtAliases("project-info")} <name> [--lines N]             project overview (adaptive detail)
   find <Name|*Pattern*> [--source-only]       find type declarations
-  references <FQN> [method] [--field <name>]  references to type/method/field
-  subtypes <FQN>                              all subtypes/implementors
-  hierarchy <FQN>                             full hierarchy (supers + interfaces + subtypes)
-  implementors <FQN> <method> [--arity n]     implementations of interface method
-  type-info <FQN>                             class overview (fields, methods, line numbers)
-  source <FQN> [method] [--arity n]           type or method source code (raw text)
+  references${fmtAliases("references")} <FQN> [method] [--field <name>]  references to type/method/field
+  subtypes${fmtAliases("subtypes")} <FQN>                              all subtypes/implementors
+  hierarchy${fmtAliases("hierarchy")} <FQN>                             full hierarchy (supers + interfaces + subtypes)
+  implementors${fmtAliases("implementors")} <FQN> <method> [--arity n]     implementations of interface method
+  type-info${fmtAliases("type-info")} <FQN>                             class overview (fields, methods, line numbers)
+  source${fmtAliases("source")} <FQN> [method] [--arity n]           type or method source code (project and libraries)
 
 Testing:
   test <FQN> [method]                         run JUnit test class or method
   test --project <name> [--package <pkg>]     run tests in project/package
 
 Diagnostics:
-  errors [--file <path>] [--project <name>]   compilation errors (refresh by default)
+  errors${fmtAliases("errors")} [--file <path>] [--project <name>]   compilation errors (refresh by default)
 
 Refactoring:
-  organize-imports <file>                     organize imports
-  format <file>                               format with Eclipse project settings
+  organize-imports${fmtAliases("organize-imports")} <file>                     organize imports
+  format${fmtAliases("format")} <file>                               format with Eclipse project settings
   rename <FQN> <newName> [--method|--field]   rename type/method/field
   move <FQN> <target.package>                 move type to another package
 
 Editor:
-  active-editor                               current file and cursor line
+  active-editor${fmtAliases("active-editor")}                               current file and cursor line
   open <FQN> [method]                         open in Eclipse editor
 
 Setup:
@@ -101,8 +133,9 @@ export async function run(argv) {
 
   if (command === "help") {
     const topic = rest[0];
-    if (topic && commands[topic]) {
-      console.log(commands[topic].help);
+    const resolved = topic ? resolve(topic) : null;
+    if (resolved) {
+      console.log(commands[resolved].help);
     } else if (topic) {
       console.error(`Unknown command: ${topic}`);
       console.log();
@@ -113,8 +146,8 @@ export async function run(argv) {
     return;
   }
 
-  const cmd = commands[command];
-  if (!cmd) {
+  const resolved = resolve(command);
+  if (!resolved) {
     console.error(`Unknown command: ${command}`);
     console.log();
     printOverview();
@@ -122,7 +155,7 @@ export async function run(argv) {
   }
 
   try {
-    await cmd.fn(rest);
+    await commands[resolved].fn(rest);
   } catch (e) {
     if (isConnectionError(e)) {
       console.error(
