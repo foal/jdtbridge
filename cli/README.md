@@ -46,49 +46,49 @@ jdt help <command>          # detailed usage for a command
 
 ```bash
 jdt projects
-jdt project-info m8-server --lines 100
+jdt project-info my-app --lines 100
 jdt find *Controller* --source-only
-jdt references app.m8.dao.StaffDaoImpl getStaff
-jdt references app.m8.dao.StaffDaoImpl --field staffCache
-jdt subtypes app.m8.web.shared.core.HasId
-jdt hierarchy app.m8.web.client.AGMEntryPoint
-jdt implementors app.m8.web.shared.core.HasId getId
-jdt type-info app.m8.dto.web.core.IdOrgRoot
-jdt source app.m8.dao.StaffDaoImpl save --arity 2
+jdt references com.example.dao.UserDao getUser
+jdt references com.example.dao.UserDao --field cache
+jdt subtypes com.example.core.HasId
+jdt hierarchy com.example.app.MainEntry
+jdt implementors com.example.core.HasId getId
+jdt type-info com.example.dto.UserDto
+jdt source com.example.dao.UserDao save --arity 2
 ```
 
 ### Testing
 
 ```bash
-jdt test app.m8ws.utils.ObjectMapperTest
-jdt test app.m8ws.utils.ObjectMapperTest testSerialize
-jdt test --project m8-server --package app.m8ws.utils
+jdt test com.example.utils.ObjectMapperTest
+jdt test com.example.utils.ObjectMapperTest testSerialize
+jdt test --project my-app --package com.example.utils
 ```
 
 ### Diagnostics
 
 ```bash
-jdt errors --project m8-server
-jdt errors --file m8-server/src/main/java/.../Foo.java
-jdt errors --project m8-server --clean
-jdt errors --project m8-server --all --warnings
+jdt errors --project my-app
+jdt errors --file my-app/src/main/java/.../Foo.java
+jdt errors --project my-app --clean
+jdt errors --project my-app --all --warnings
 ```
 
 ### Refactoring
 
 ```bash
-jdt organize-imports m8-server/src/main/java/.../Foo.java
-jdt format m8-server/src/main/java/.../Foo.java
-jdt rename app.m8.dto.Foo Bar
-jdt rename app.m8.dto.Foo getBar --method getFoo
-jdt move app.m8.dto.Foo app.m8.dto.shared
+jdt organize-imports my-app/src/main/java/.../Foo.java
+jdt format my-app/src/main/java/.../Foo.java
+jdt rename com.example.dto.Foo Bar
+jdt rename com.example.dto.Foo getBar --method getFoo
+jdt move com.example.dto.Foo com.example.dto.shared
 ```
 
 ### Editor
 
 ```bash
 jdt active-editor
-jdt open app.m8.dao.StaffDaoImpl getStaff
+jdt open com.example.dao.UserDao getUser
 ```
 
 ## Instance discovery

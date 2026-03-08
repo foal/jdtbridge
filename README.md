@@ -61,7 +61,7 @@ All endpoints accept GET requests with query parameters. The server returns JSON
 List all Java projects in the workspace.
 
 ```json
-["m8-server","m8-shared","m8-client"]
+["my-app-server","my-app-shared","my-app-client"]
 ```
 
 #### `GET /project-info?project=<name>[&members-threshold=N]`
@@ -74,7 +74,7 @@ Find type declarations by name. Supports wildcards (`*Controller*`, `Find*`). Ad
 
 ```json
 [
-  {"fqn":"app.m8.dao.proc.org.GetOrgByOrg","file":"/m8-server/src/main/java/..."}
+  {"fqn":"com.example.service.UserService","file":"/my-app-server/src/main/java/..."}
 ]
 ```
 
