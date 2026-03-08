@@ -10,7 +10,7 @@ coverage/
 .project
 
 # Generated
-jdtbridge.target
+*.target
 *.class
 
 # OS
