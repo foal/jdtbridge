@@ -51,6 +51,38 @@ jdt setup         # builds plugin, installs into Eclipse
 
 After pulling updates, run `jdt setup` again.
 
+## Why CLI, not MCP?
+
+MCP is the natural first thought for connecting an IDE to an AI agent. But JDT Bridge is a CLI — and that's a deliberate choice.
+
+**Pipe composability is the killer feature.** MCP tool results go straight into the agent's context window, unfiltered. CLI output flows through the shell first:
+
+```bash
+# A 65-method DAO class, but you only care about folder operations.
+# MCP: all 65 methods enter context. CLI: just the 27 that matter.
+jdt ti com.example.dao.FileRepository | grep -i folder
+
+# "How many call sites?" — you need a number, not 200 lines of references.
+jdt refs com.example.core.Event dispatch | wc -l
+
+# 47 compilation errors, but you're fixing them one at a time.
+jdt err --project my-server | head -5
+
+# Find where a method throws without reading all 80 lines of source.
+jdt src com.example.util.StringHelper normalize | grep -A2 'throw'
+
+# Chain semantic queries with standard tools.
+jdt find '*Controller' | xargs -I{} jdt refs {} handleRequest | sort -u
+```
+
+An agent's context window is finite. Every irrelevant token displaces useful reasoning. MCP's [own community recognizes this](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1576) — token bloat from tool schemas and unfiltered results is a known problem, with projects like [model-context-shell](https://github.com/StacklokLabs/model-context-shell) trying to retrofit Unix-style pipes onto MCP.
+
+**Works for everyone.** The same `jdt` command works in your terminal, in shell scripts, in CI, and for any AI agent. MCP requires per-IDE configuration and isn't directly usable by humans. When something goes wrong, you debug by running the same command the agent ran — no log spelunking.
+
+**No lock-in.** Anything that can run a shell command can use `jdt` — Claude Code, Cursor, Windsurf, Copilot, aider, or a plain bash script. MCP support varies by IDE and changes with every release.
+
+MCP is the right choice for things like database connections, OAuth flows, or cloud APIs with no CLI equivalent. But for developer tools where output filtering matters and humans benefit too, a CLI wins.
+
 ## Commands
 
 Most commands have short aliases for quick typing.
