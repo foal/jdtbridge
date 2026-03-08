@@ -1,26 +1,38 @@
 # JDT Bridge
 
-Eclipse's JDT compiler builds a deep semantic index of your Java code — type hierarchies, cross-project references, method resolution, import management. JDT Bridge makes all of that available from the terminal via the `jdt` CLI.
+Grep finds strings. JDT Bridge understands Java.
 
-Built for AI coding assistants (Claude Code, Cursor, etc.) and developers who want IDE-grade Java intelligence outside the IDE.
+Eclipse's JDT compiler builds a deep semantic index of your code — type hierarchies, cross-project references, method overloads, transitive dependencies. JDT Bridge exposes all of that via the `jdt` CLI, giving AI coding agents (Claude Code, Cursor, etc.) the same understanding of your codebase that a human gets in the IDE.
 
-## What you can do
+## Why it matters
 
 ```bash
-# Find all implementations of an interface method across your workspace
-jdt implementors com.example.core.HasId getId
+# "Who calls this method?" — grep returns 200 hits including comments,
+# identically-named methods in other classes, and string literals.
+# JDT returns only the 8 actual call sites, with file and line numbers.
+jdt refs com.example.dao.OrderRepository save --arity 1
 
-# Rename a method — updates every reference in every project
-jdt rename com.example.dao.UserDao getUser --method findUser
+# Read Spring/Hibernate/JDK source code by name.
+# Without JDT this is impossible — library sources live inside JARs.
+# The agent gets the same "go to definition" power a developer has in the IDE.
+jdt src org.springframework.transaction.support.TransactionTemplate execute
 
-# Run a single test method and see failures inline
-jdt test com.example.service.UserServiceTest testCreate
+# "Did my edit compile?" — Maven takes 30-90 seconds for a module build.
+# Eclipse's incremental compiler already knows the answer. Sub-second response.
+jdt err --project my-app-server
 
-# Get compilation errors after editing outside Eclipse
-jdt errors --project my-app
+# "What classes implement this interface method?" — grep for a common name
+# like "save" or "onInit" returns every class that has that method name.
+# JDT resolves the type hierarchy and returns only actual implementations.
+jdt impl com.example.core.Repository save --arity 1
 
-# Read source code by name — project code and library code alike
-jdt source com.example.dao.UserDao save --arity 2
+# Understand a 600-line class without reading it. Fields, method signatures,
+# supertypes, line numbers — structured overview, not raw source.
+jdt ti com.example.web.OrderController
+
+# Run a single test method in seconds via Eclipse's built-in runner.
+# Maven Surefire takes 30+ seconds of lifecycle overhead for the same thing.
+jdt test com.example.service.OrderServiceTest testCalculateTotal
 ```
 
 ## Getting started
