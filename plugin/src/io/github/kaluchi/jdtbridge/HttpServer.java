@@ -9,6 +9,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -32,7 +33,7 @@ public class HttpServer {
     private final ProjectHandler projectInfo = new ProjectHandler();
     private final ExecutorService executor =
             Executors.newFixedThreadPool(4, r -> {
-                Thread t = new Thread(r, "jdt-bridge-req");
+                Thread t = new Thread(r, "jdtbridge-req");
                 t.setDaemon(true);
                 return t;
             });
@@ -56,7 +57,7 @@ public class HttpServer {
         serverSocket = new ServerSocket(
                 0, 50, InetAddress.getLoopbackAddress());
         running = true;
-        Thread t = new Thread(this::acceptLoop, "jdt-bridge-http");
+        Thread t = new Thread(this::acceptLoop, "jdtbridge-http");
         t.setDaemon(true);
         t.start();
     }
@@ -124,7 +125,9 @@ public class HttpServer {
             if (token != null && !token.isEmpty()) {
                 String expected = "Bearer " + token;
                 if (authHeader == null
-                        || !authHeader.equals(expected)) {
+                        || !MessageDigest.isEqual(
+                                expected.getBytes(StandardCharsets.UTF_8),
+                                authHeader.getBytes(StandardCharsets.UTF_8))) {
                     sendError(socket, 401, "Unauthorized");
                     return;
                 }
@@ -250,11 +253,4 @@ public class HttpServer {
         out.flush();
     }
 
-    /**
-     * JSON string escaping — delegates to {@link Json#escape(String)}.
-     * Kept for backward compatibility with tests.
-     */
-    static String escapeJson(String s) {
-        return Json.escape(s);
-    }
 }

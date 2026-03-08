@@ -59,9 +59,7 @@ describe("setup command", () => {
       writeConfig: () => ({}),
       getHome: () => "/mock/home",
       instancesDir: () => "/mock/home/instances",
-      pluginDir: () => "/mock/home/plugin",
       resetHome: () => {},
-      workspaceHash: () => "abc123",
       ...overrides.home,
     };
 

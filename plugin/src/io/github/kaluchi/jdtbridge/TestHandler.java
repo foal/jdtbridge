@@ -71,7 +71,7 @@ class TestHandler {
                     "JUnit launch type not available");
         }
 
-        String configName = "jdt-bridge-test-"
+        String configName = "jdtbridge-test-"
                 + System.currentTimeMillis();
         ILaunchConfigurationWorkingCopy wc =
                 launchType.newInstance(null, configName);

@@ -5,10 +5,8 @@ import { tmpdir } from "node:os";
 import {
   getHome,
   instancesDir,
-  pluginDir,
   readConfig,
   writeConfig,
-  workspaceHash,
   resetHome,
 } from "../src/home.mjs";
 
@@ -59,14 +57,6 @@ describe("home", () => {
     });
   });
 
-  describe("pluginDir", () => {
-    it("creates plugin subdirectory", () => {
-      const dir = pluginDir();
-      expect(dir).toBe(join(testDir, "plugin"));
-      expect(existsSync(dir)).toBe(true);
-    });
-  });
-
   describe("readConfig / writeConfig", () => {
     it("returns empty object when no config exists", () => {
       expect(readConfig()).toEqual({});
@@ -89,20 +79,6 @@ describe("home", () => {
     it("returns empty object for corrupt config", () => {
       writeFileSync(join(testDir, "config.json"), "not json{{{");
       expect(readConfig()).toEqual({});
-    });
-  });
-
-  describe("workspaceHash", () => {
-    it("returns a 12-char hex string", () => {
-      expect(workspaceHash("/home/user/ws")).toMatch(/^[0-9a-f]{12}$/);
-    });
-
-    it("is deterministic", () => {
-      expect(workspaceHash("/a/b")).toBe(workspaceHash("/a/b"));
-    });
-
-    it("differs for different paths", () => {
-      expect(workspaceHash("/a")).not.toBe(workspaceHash("/b"));
     });
   });
 });

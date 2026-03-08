@@ -5,9 +5,6 @@ import {
   red,
   green,
   yellow,
-  blue,
-  cyan,
-  gray,
   bold,
   dim,
 } from "../src/color.mjs";
@@ -124,16 +121,13 @@ describe("color", () => {
       expect(red("x")).toBe("x");
       expect(green("x")).toBe("x");
       expect(yellow("x")).toBe("x");
-      expect(blue("x")).toBe("x");
-      expect(cyan("x")).toBe("x");
-      expect(gray("x")).toBe("x");
       expect(bold("x")).toBe("x");
       expect(dim("x")).toBe("x");
     });
 
     it("all apply ANSI codes when enabled", () => {
       setColorEnabled(true);
-      for (const fn of [red, green, yellow, blue, cyan, gray, bold, dim]) {
+      for (const fn of [red, green, yellow, bold, dim]) {
         const result = fn("test");
         expect(result).not.toBe("test");
         expect(result).toContain("test");

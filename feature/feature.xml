@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <feature
       id="io.github.kaluchi.jdtbridge.feature"
-      label="JDT Search HTTP Bridge"
+      label="JDT Bridge"
       version="1.0.0.qualifier"
       provider-name="kaluchi">
 
@@ -22,7 +22,7 @@
    </license>
 
    <url>
-      <discovery label="JDT Search HTTP Bridge" url="https://github.com/kaluchi/jdtbridge"/>
+      <discovery label="JDT Bridge" url="https://github.com/kaluchi/jdtbridge"/>
    </url>
 
    <requires>

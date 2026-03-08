@@ -1,8 +1,24 @@
 target/
 bin/
 !cli/bin/
+node_modules/
+coverage/
+
+# Eclipse IDE
 .settings/
 .classpath
 .project
-node_modules/
+
+# Generated
 jdtbridge.target
+*.class
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+*.iml
+*.swp
+*.swo

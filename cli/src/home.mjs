@@ -3,7 +3,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { createHash } from "node:crypto";
 
 const DEFAULT_HOME = join(homedir(), ".jdtbridge");
 
@@ -20,13 +19,6 @@ export function getHome() {
 /** Directory where running Eclipse instances write their bridge files. */
 export function instancesDir() {
   const dir = join(getHome(), "instances");
-  ensureDir(dir);
-  return dir;
-}
-
-/** Directory for plugin artifacts (JARs, build cache). */
-export function pluginDir() {
-  const dir = join(getHome(), "plugin");
   ensureDir(dir);
   return dir;
 }
@@ -54,11 +46,6 @@ export function writeConfig(updates) {
 /** Reset cached home path (for testing). */
 export function resetHome() {
   _home = undefined;
-}
-
-/** Deterministic short hash of a workspace path, used as instance filename. */
-export function workspaceHash(workspacePath) {
-  return createHash("sha256").update(workspacePath).digest("hex").slice(0, 12);
 }
 
 function ensureDir(dir) {

@@ -36,8 +36,5 @@ function wrap(fn) {
 export const red = wrap(pc.red);
 export const green = wrap(pc.green);
 export const yellow = wrap(pc.yellow);
-export const blue = wrap(pc.blue);
-export const cyan = wrap(pc.cyan);
-export const gray = wrap(pc.gray);
 export const bold = wrap(pc.bold);
 export const dim = wrap(pc.dim);

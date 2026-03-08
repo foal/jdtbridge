@@ -183,6 +183,7 @@ jdtbridge/
     META-INF/MANIFEST.MF               # Fragment-Host: io.github.kaluchi.jdtbridge
     src/io/github/kaluchi/jdtbridge/   # Unit tests (Json, HttpServer, handlers)
   feature/
+    pom.xml                            # Feature module (eclipse-feature packaging)
     feature.xml                        # Eclipse feature for p2 update site
   site/
     pom.xml                            # P2 repository (eclipse-repository packaging)

@@ -28,11 +28,6 @@ export function connect(workspaceHint) {
   return _instance;
 }
 
-/** Get the current instance (must call connect() first). */
-export function getInstance() {
-  return _instance;
-}
-
 /** Reset cached instance (for testing). */
 export function resetClient() {
   _instance = null;

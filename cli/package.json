@@ -29,8 +29,11 @@
   "author": "kaluchi",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kaluchi/jdtbridge"
+    "url": "https://github.com/kaluchi/jdtbridge.git",
+    "directory": "cli"
   },
+  "homepage": "https://github.com/kaluchi/jdtbridge/tree/master/cli",
+  "bugs": "https://github.com/kaluchi/jdtbridge/issues",
   "devDependencies": {
     "@vitest/coverage-v8": "^3.2.4",
     "vitest": "^3.0.0"

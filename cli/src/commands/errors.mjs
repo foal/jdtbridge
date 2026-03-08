@@ -8,7 +8,8 @@ export async function errors(args) {
   const params = [];
   if (flags.file) params.push(`file=${encodeURIComponent(toWsPath(flags.file))}`);
   if (flags.project) params.push(`project=${encodeURIComponent(flags.project)}`);
-  if (args.includes("--no-refresh")) params.push("no-refresh");
+  const noRefresh = args.includes("--no-refresh");
+  if (noRefresh) params.push("no-refresh");
   if (flags.build) params.push("build");
   if (flags.clean) params.push("clean");
   if (flags.warnings) params.push("warnings");
@@ -16,8 +17,6 @@ export async function errors(args) {
 
   let url = "/errors";
   if (params.length > 0) url += "?" + params.join("&");
-
-  const noRefresh = args.includes("--no-refresh");
   const timeout =
     !noRefresh || flags.build || flags.clean ? 180_000 : 10_000;
   const results = await get(url, timeout);
