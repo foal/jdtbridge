@@ -20,6 +20,7 @@ import {
   startEclipse,
   getEclipseJavaHome,
   generateTargetPlatform,
+  isEclipseInstall,
   waitForBridge,
   p2Install,
   p2Uninstall,
@@ -183,10 +184,7 @@ async function runInstall(config, flags) {
   let eclipsePath = findEclipsePath(config);
   if (!eclipsePath) {
     eclipsePath = await ask("  Eclipse not found. Path: ");
-    if (
-      !eclipsePath ||
-      !existsSync(join(eclipsePath, eclipseExe("eclipsec")))
-    ) {
+    if (!eclipsePath || !isEclipseInstall(eclipsePath)) {
       console.error("  Not a valid Eclipse installation.");
       process.exit(1);
     }
@@ -288,18 +286,23 @@ async function runInstall(config, flags) {
 
   // Restart
   console.log();
-  if (wasRunning) {
-    const pid = startEclipse(eclipsePath, workspace);
-    info(`Eclipse started (PID ${pid})`);
-    info("Waiting for bridge...");
-    try {
-      const { port, projects } = await waitForBridge(discoverInstances, pid);
-      ok(`Bridge ready on port ${port} (${projects.length} projects)`);
-    } catch {
-      fail("Bridge did not start (Eclipse may still be loading)");
+  const launcherPath = join(eclipsePath, eclipseExe("eclipse"));
+  if (existsSync(launcherPath)) {
+    if (wasRunning) {
+      const pid = startEclipse(eclipsePath, workspace);
+      info(`Eclipse started (PID ${pid})`);
+      info("Waiting for bridge...");
+      try {
+        const { port, projects } = await waitForBridge(discoverInstances, pid);
+        ok(`Bridge ready on port ${port} (${projects.length} projects)`);
+      } catch {
+        fail("Bridge did not start (Eclipse may still be loading)");
+      }
+    } else {
+      info("Start Eclipse to activate the plugin.");
     }
   } else {
-    info("Start Eclipse to activate the plugin.");
+    info("Plugin installed. Run your Eclipse product to complete setup and activate the bridge.");
   }
 
   console.log();
