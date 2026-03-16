@@ -3,10 +3,12 @@ package io.github.kaluchi.jdtbridge;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.jar.Manifest;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.debug.core.DebugPlugin;
 import org.eclipse.debug.core.ILaunch;
@@ -14,8 +16,11 @@ import org.eclipse.debug.core.ILaunchConfigurationType;
 import org.eclipse.debug.core.ILaunchConfigurationWorkingCopy;
 import org.eclipse.debug.core.ILaunchManager;
 import org.eclipse.debug.core.Launch;
+import org.eclipse.jdt.core.IClasspathEntry;
+import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IPackageFragment;
+import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.JavaModelException;
@@ -28,6 +33,7 @@ import org.eclipse.jdt.junit.model.ITestElement.FailureTrace;
 import org.eclipse.jdt.junit.model.ITestElementContainer;
 import org.eclipse.jdt.junit.model.ITestRunSession;
 import org.eclipse.jdt.launching.IJavaLaunchConfigurationConstants;
+import org.osgi.framework.Version;
 
 /**
  * Handler for /test endpoint: run JUnit tests via Eclipse's
@@ -43,10 +49,23 @@ class TestHandler {
             "org.eclipse.jdt.junit.TESTNAME";
     private static final String ATTR_TEST_CONTAINER =
             "org.eclipse.jdt.junit.CONTAINER";
+    private static final String JUNIT6_KIND =
+            "org.eclipse.jdt.junit.loader.junit6";
     private static final String JUNIT5_KIND =
             "org.eclipse.jdt.junit.loader.junit5";
     private static final String JUNIT4_KIND =
             "org.eclipse.jdt.junit.loader.junit4";
+    private static final String JUNIT_PLATFORM_COMMONS_PREFIX =
+            "junit-platform-commons";
+    private static final String JUNIT_PLATFORM_SUITE_API_PREFIX =
+            "junit-platform-suite-api";
+    private static final String JUNIT_PLATFORM_TESTABLE =
+            "org.junit.platform.commons.annotation.Testable";
+    private static final String JUNIT_PLATFORM_SUITE =
+            "org.junit.platform.suite.api.Suite";
+    private static final String JAR_EXTENSION = ".jar";
+    private static final String SPECIFICATION_VERSION =
+            "Specification-Version";
 
     String handleTest(Map<String, String> params) throws Exception {
         String fqn = params.get("class");
@@ -159,7 +178,7 @@ class TestHandler {
                     IJavaLaunchConfigurationConstants
                             .ATTR_PROJECT_NAME,
                     projectName);
-            wc.setAttribute(ATTR_TEST_KIND, JUNIT5_KIND);
+            wc.setAttribute(ATTR_TEST_KIND, detectTestKind(jp));
 
             if (packageName != null && !packageName.isBlank()) {
                 IPackageFragment pkg =
@@ -308,14 +327,135 @@ class TestHandler {
     // ---- Helpers ----
 
     String detectTestKind(IType type) {
+        return detectTestKind(type.getJavaProject());
+    }
+
+    String detectTestKind(IJavaProject project) {
         try {
-            IType junit5 = type.getJavaProject()
-                    .findType("org.junit.jupiter.api.Test");
-            if (junit5 != null) return JUNIT5_KIND;
+            if (hasJUnitJupiterMajor(project, 6,
+                    JUnitCore.JUNIT3_CONTAINER_PATH,
+                    JUnitCore.JUNIT4_CONTAINER_PATH,
+                    JUnitCore.JUNIT5_CONTAINER_PATH)) {
+                return JUNIT6_KIND;
+            }
+            if (hasJUnitJupiterMajor(project, 5,
+                    JUnitCore.JUNIT3_CONTAINER_PATH,
+                    JUnitCore.JUNIT4_CONTAINER_PATH,
+                    JUnitCore.JUNIT6_CONTAINER_PATH)) {
+                return JUNIT5_KIND;
+            }
         } catch (JavaModelException e) {
             Log.warn("detectTestKind failed", e);
         }
         return JUNIT4_KIND;
+    }
+
+    private boolean hasJUnitJupiterMajor(IJavaProject project,
+            int expectedMajor, IPath... excludedPaths)
+            throws JavaModelException {
+        if (project == null) return false;
+
+        IType marker = findJUnitPlatformMarker(project);
+        if (marker == null) return false;
+
+        Integer major = resolveJUnitMajor(marker);
+        if (major != null) {
+            return major == expectedMajor;
+        }
+
+        IPath classpath = getRawClasspathPath(marker);
+        return classpath != null
+                && !matchesAny(classpath, excludedPaths);
+    }
+
+    private IType findJUnitPlatformMarker(IJavaProject project)
+            throws JavaModelException {
+        IType marker = project.findType(JUNIT_PLATFORM_TESTABLE);
+        if (marker != null) return marker;
+        return project.findType(JUNIT_PLATFORM_SUITE);
+    }
+
+    private Integer resolveJUnitMajor(IType marker) {
+        IPath path = marker.getPath();
+        if (path == null) return null;
+
+        String jarName = path.lastSegment();
+        if (jarName == null || !jarName.endsWith(JAR_EXTENSION)) {
+            return null;
+        }
+
+        String prefix = marker.getFullyQualifiedName('.')
+                .equals(JUNIT_PLATFORM_TESTABLE)
+                        ? JUNIT_PLATFORM_COMMONS_PREFIX
+                        : JUNIT_PLATFORM_SUITE_API_PREFIX;
+
+        String version = extractVersion(jarName, prefix);
+        if (version == null) {
+            version = readManifestVersion(marker);
+        }
+        if (version == null) return null;
+
+        try {
+            return Version.parseVersion(version).getMajor();
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private String readManifestVersion(IType marker) {
+        IJavaElement root =
+                marker.getAncestor(
+                        IJavaElement.PACKAGE_FRAGMENT_ROOT);
+        if (root == null) return null;
+
+        try {
+            Object manifestObj = root.getClass()
+                    .getMethod("getManifest")
+                    .invoke(root);
+            if (!(manifestObj instanceof Manifest manifest)) {
+                return null;
+            }
+            return manifest.getMainAttributes()
+                    .getValue(SPECIFICATION_VERSION);
+        } catch (ReflectiveOperationException e) {
+            return null;
+        }
+    }
+
+    private String extractVersion(String jarName, String prefix) {
+        String dashPrefix = prefix + "-";
+        String underscorePrefix = prefix + "_";
+        if (jarName.startsWith(dashPrefix)) {
+            return jarName.substring(dashPrefix.length(),
+                    jarName.length() - JAR_EXTENSION.length());
+        }
+        if (jarName.startsWith(underscorePrefix)) {
+            return jarName.substring(underscorePrefix.length(),
+                    jarName.length() - JAR_EXTENSION.length());
+        }
+        return null;
+    }
+
+    private IPath getRawClasspathPath(IType marker)
+            throws JavaModelException {
+        IJavaElement rootElement =
+                marker.getAncestor(
+                        IJavaElement.PACKAGE_FRAGMENT_ROOT);
+        if (!(rootElement instanceof IPackageFragmentRoot root)) {
+            return null;
+        }
+
+        IClasspathEntry entry = root.getRawClasspathEntry();
+        return entry != null ? entry.getPath() : null;
+    }
+
+    private boolean matchesAny(IPath path, IPath... candidates) {
+        for (IPath candidate : candidates) {
+            if (candidate != null && candidate.equals(path)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private IPackageFragment findPackage(IJavaProject project,
