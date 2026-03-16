@@ -36,12 +36,19 @@ export function isEclipseRunning() {
 /**
  * Find Eclipse installation directory.
  * Checks config first, then well-known locations.
+ * Accepts either a traditional install with eclipsec(.exe) or any
+ * Eclipse-based product that has a .eclipseproduct marker file
+ * (e.g. Spring Tools, STS).
  */
+export function isEclipseInstall(dir) {
+  if (!dir) return false;
+  if (existsSync(join(dir, eclipseExe("eclipsec")))) return true;
+  if (existsSync(join(dir, ".eclipseproduct"))) return true;
+  return false;
+}
+
 export function findEclipsePath(config) {
-  if (
-    config.eclipse &&
-    existsSync(join(config.eclipse, eclipseExe("eclipsec")))
-  ) {
+  if (config.eclipse && isEclipseInstall(config.eclipse)) {
     return config.eclipse;
   }
   const candidates = IS_WIN
@@ -52,7 +59,7 @@ export function findEclipsePath(config) {
         `${process.env.HOME}/eclipse`,
       ];
   for (const p of candidates) {
-    if (existsSync(join(p, eclipseExe("eclipsec")))) return p;
+    if (isEclipseInstall(p)) return p;
   }
   return null;
 }
@@ -177,11 +184,43 @@ export function generateTargetPlatform(repoRoot, eclipsePath) {
   writeFileSync(targetFile, content);
 }
 
+function findLauncherJar(eclipsePath) {
+  const pluginsDir = join(eclipsePath, "plugins");
+  if (!existsSync(pluginsDir)) return null;
+  const jars = readdirSync(pluginsDir).filter((f) =>
+    f.startsWith("org.eclipse.equinox.launcher_") && f.endsWith(".jar"),
+  );
+  if (jars.length === 0) return null;
+  // Pick the last one (typically the highest version)
+  return join(pluginsDir, jars[jars.length - 1]);
+}
+
 /** Run the p2 director application (headless Eclipse). */
 export function runDirector(eclipsePath, profile, extraArgs) {
-  const exe = join(eclipsePath, eclipseExe("eclipsec"));
+  const eclipsecPath = join(eclipsePath, eclipseExe("eclipsec"));
+
+  let cmd;
+  let prefixArgs = [];
+
+  if (existsSync(eclipsecPath)) {
+    // Classic Eclipse launcher
+    cmd = `"${eclipsecPath}"`;
+  } else {
+    // Fallback: run via Equinox launcher JAR (works for Eclipse-based products
+    // such as Spring Tools that ship a branded launcher instead of eclipsec).
+    const launcherJar = findLauncherJar(eclipsePath);
+    if (!launcherJar) {
+      throw new Error(
+        "Cannot find eclipsec(.exe) or org.eclipse.equinox.launcher_*.jar in Eclipse installation.",
+      );
+    }
+    cmd = "java";
+    prefixArgs = ["-jar", `"${launcherJar}"`];
+  }
+
   const args = [
-    `"${exe}"`,
+    cmd,
+    ...prefixArgs,
     "-nosplash",
     "-application",
     "org.eclipse.equinox.p2.director",
