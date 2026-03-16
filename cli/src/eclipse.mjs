@@ -191,7 +191,7 @@ function findLauncherJar(eclipsePath) {
     f.startsWith("org.eclipse.equinox.launcher_") && f.endsWith(".jar"),
   );
   if (jars.length === 0) return null;
-  // Pick the last one (typically the highest version)
+  jars.sort();
   return join(pluginsDir, jars[jars.length - 1]);
 }
 
