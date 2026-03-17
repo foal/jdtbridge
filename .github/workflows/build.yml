@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
     branches: [master]
 
@@ -49,3 +50,96 @@ jobs:
           MAVEN_OPTS: >-
             -Djdk.xml.totalEntitySizeLimit=0
             -Djdk.xml.maxGeneralEntitySizeLimit=0
+
+      - name: Upload p2 repository
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2-repository
+          path: site/target/repository/
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [cli, plugin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+        continue-on-error: true
+
+      - name: Prepare gh-pages directory
+        run: mkdir -p gh-pages
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: p2-repository
+          path: new-release
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Add release to composite site
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          mkdir -p gh-pages/releases/${VERSION}
+          cp -r new-release/* gh-pages/releases/${VERSION}/
+
+          CHILDREN=""
+          CHILD_COUNT=0
+          for dir in gh-pages/releases/*/; do
+            if [ -d "$dir" ]; then
+              rel=$(basename "$dir")
+              CHILDREN="${CHILDREN}<child location=\"releases/${rel}\"/>"
+              CHILD_COUNT=$((CHILD_COUNT + 1))
+            fi
+          done
+
+          TIMESTAMP=$(date +%s000)
+
+          generate_composite() {
+            local type_name="$1"
+            local type_class="$2"
+            local pi_name="$3"
+            cat <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <?${pi_name} version="1.0.0"?>
+          <repository name="JDT Bridge Update Site" type="${type_class}" version="1.0.0">
+            <properties size="2">
+              <property name="p2.timestamp" value="${TIMESTAMP}"/>
+              <property name="p2.compressed" value="false"/>
+            </properties>
+            <children size="${CHILD_COUNT}">
+              ${CHILDREN}
+            </children>
+          </repository>
+          EOF
+          }
+
+          generate_composite content \
+            "org.eclipse.equinox.internal.p2.metadata.repository.CompositeMetadataRepository" \
+            "compositeMetadataRepository" \
+            > gh-pages/compositeContent.xml
+
+          generate_composite artifacts \
+            "org.eclipse.equinox.internal.p2.artifact.repository.CompositeArtifactRepository" \
+            "compositeArtifactRepository" \
+            > gh-pages/compositeArtifacts.xml
+
+          cat > gh-pages/p2.index <<EOF
+          version=1
+          metadata.repository.factory.order=compositeContent.xml,\!
+          artifact.repository.factory.order=compositeArtifacts.xml,\!
+          EOF
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: gh-pages
+          clean: false
