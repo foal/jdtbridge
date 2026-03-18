@@ -344,6 +344,12 @@ class TestHandler {
                     JUnitCore.JUNIT6_CONTAINER_PATH)) {
                 return JUNIT5_KIND;
             }
+            // Fallback: Jupiter API on classpath but platform
+            // marker not resolvable (common with M2Eclipse)
+            if (project.findType(
+                    "org.junit.jupiter.api.Test") != null) {
+                return JUNIT5_KIND;
+            }
         } catch (JavaModelException e) {
             Log.warn("detectTestKind failed", e);
         }
