@@ -55,6 +55,26 @@ public class TestHandlerTest {
     }
 
     @Test
+    public void detectTestKindJunit5FallbackFromJupiterApi() {
+        // Platform markers not resolvable, but Jupiter API is
+        IJavaProject project = fakeProjectWithFallbackOnly(
+                "org.junit.jupiter.api.Test");
+
+        String kind = handler.detectTestKind(project);
+
+        assertEquals("org.eclipse.jdt.junit.loader.junit5", kind);
+    }
+
+    @Test
+    public void detectTestKindFallsBackToJunit4WhenNothingFound() {
+        IJavaProject project = fakeProjectWithFallbackOnly(null);
+
+        String kind = handler.detectTestKind(project);
+
+        assertEquals("org.eclipse.jdt.junit.loader.junit4", kind);
+    }
+
+    @Test
     public void parseTimeoutDefault() {
         assertEquals(120, invokeParseTimeout(null, 120));
     }
@@ -81,6 +101,31 @@ public class TestHandlerTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Project where platform markers are NOT resolvable,
+     * but an optional fallback type IS (e.g. Jupiter API
+     * present without junit-platform-commons).
+     */
+    private IJavaProject fakeProjectWithFallbackOnly(
+            String fallbackFqn) {
+        return (IJavaProject) Proxy.newProxyInstance(
+                IJavaProject.class.getClassLoader(),
+                new Class<?>[] { IJavaProject.class },
+                (proxy, method, args) -> {
+                    if ("findType".equals(method.getName())
+                            && args != null
+                            && args.length == 1
+                            && fallbackFqn != null
+                            && fallbackFqn.equals(args[0])) {
+                        return fakeType(fallbackFqn,
+                                "junit-jupiter-api-5.12.1.jar",
+                                new Path("/libs/junit-jupiter-api"
+                                        + "-5.12.1.jar"));
+                    }
+                    return defaultValue(method.getReturnType());
+                });
     }
 
     private IJavaProject fakeProjectWithMarker(String markerFqn,
