@@ -131,6 +131,13 @@ jobs:
           artifact.repository.factory.order=compositeArtifacts.xml,\!
           IDXEOF
 
+      - name: Update landing page version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [ -f site-content/index.html ]; then
+            sed -i "s|<div class=\"version\">v[^<]*</div>|<div class=\"version\">v${VERSION}</div>|" site-content/index.html
+          fi
+
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
