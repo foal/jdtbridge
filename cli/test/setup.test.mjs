@@ -162,9 +162,13 @@ describe("setup command", () => {
       ).toBe(true);
     });
 
-    it("shows plugin version when installed", async () => {
+    it("shows plugin version from bridge instance", async () => {
       mockDeps({
-        eclipse: { getInstalledVersion: () => "1.0.5" },
+        discovery: {
+          discoverInstances: () => [
+            { port: 9999, pid: 1, workspace: "/ws", version: "1.0.5", location: "file:plugins/bundle.jar" },
+          ],
+        },
       });
       const { setup } = await importSetup();
       await setup(["--check"]);

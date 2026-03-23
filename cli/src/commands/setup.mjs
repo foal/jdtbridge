@@ -137,10 +137,6 @@ async function runCheck(config) {
     );
     const profile = detectProfile(eclipsePath);
     (profile ? ok : fail)(`Profile: ${profile || "not found"}`);
-    const installed = getInstalledVersion(eclipsePath, BUNDLE_ID);
-    (installed ? ok : fail)(
-      installed ? `Plugin: ${installed}` : "Plugin: not installed",
-    );
     const running = isEclipseRunning();
     (running ? ok : info)(running ? "Running" : "Not running");
   } else {
@@ -153,6 +149,7 @@ async function runCheck(config) {
   if (instances.length > 0) {
     for (const inst of instances) {
       ok(`port ${inst.port}, PID ${inst.pid}, workspace ${inst.workspace}`);
+      if (inst.version) ok(`Plugin: ${inst.version}${inst.location ? dim(` — ${inst.location}`) : ""}`);
     }
   } else {
     fail("No live instances");
