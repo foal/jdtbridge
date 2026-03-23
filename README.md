@@ -52,7 +52,9 @@ npm link          # registers global `jdt` and `jdtbridge` commands
 
 **Option A — from Eclipse Marketplace** (recommended):
 
-Install [JDT Bridge from Marketplace](https://marketplace.eclipse.org/content/jdt-bridge), or drag the install button into a running Eclipse.
+Install [JDT Bridge from Marketplace](https://marketplace.eclipse.org/content/jdt-cli-bridge-ai-coding-assistants), or drag the install button into a running Eclipse:
+
+<a href="https://marketplace.eclipse.org/marketplace-client-intro?mpc_install=7423866" title="Drag to your running Eclipse workspace — requires Eclipse Marketplace Client"><img src="https://marketplace.eclipse.org/modules/custom/eclipsefdn/eclipsefdn_marketplace/images/btn-install.svg" width="80" alt="Install" /></a>
 
 **Option B — via Update Site:**
 
