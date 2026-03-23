@@ -32,6 +32,9 @@ import {
 import { setup, help as setupHelp } from "./commands/setup.mjs";
 import { isConnectionError } from "./client.mjs";
 import { bold, red, dim } from "./color.mjs";
+import { createRequire } from "node:module";
+
+const { version } = createRequire(import.meta.url)("../package.json");
 
 const commands = {
   projects: { fn: projects, help: projectsHelp },
@@ -132,6 +135,11 @@ export async function run(argv) {
 
   if (!command || command === "--help") {
     printOverview();
+    return;
+  }
+
+  if (command === "--version" || command === "-v") {
+    console.log(version);
     return;
   }
 
