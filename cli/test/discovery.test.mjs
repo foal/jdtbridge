@@ -115,6 +115,28 @@ describe("discovery", () => {
       const instances = discoverInstances();
       expect(instances).toHaveLength(2);
     });
+
+    it("passes through version and location fields", () => {
+      writeInstance("v.json", {
+        port: 7891, token: "t", pid: process.pid, workspace: "/ws",
+        version: "1.0.0.202603181541",
+        location: "reference:file:plugins/io.github.kaluchi.jdtbridge_1.0.0.jar",
+      });
+      const instances = discoverInstances();
+      expect(instances).toHaveLength(1);
+      expect(instances[0].version).toBe("1.0.0.202603181541");
+      expect(instances[0].location).toBe("reference:file:plugins/io.github.kaluchi.jdtbridge_1.0.0.jar");
+    });
+
+    it("works without version and location (backwards compat)", () => {
+      writeInstance("old.json", {
+        port: 7891, token: "t", pid: process.pid, workspace: "/ws",
+      });
+      const instances = discoverInstances();
+      expect(instances).toHaveLength(1);
+      expect(instances[0].version).toBeUndefined();
+      expect(instances[0].location).toBeUndefined();
+    });
   });
 
   describe("findInstance", () => {

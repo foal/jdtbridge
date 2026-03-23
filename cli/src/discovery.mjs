@@ -10,6 +10,8 @@ import { instancesDir } from "./home.mjs";
  * @property {string} token
  * @property {number} pid
  * @property {string} workspace
+ * @property {string} [version] - plugin version (added in 1.1)
+ * @property {string} [location] - bundle location URI
  * @property {string} file - path to the instance file
  */
 

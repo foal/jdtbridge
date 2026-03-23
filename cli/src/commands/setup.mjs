@@ -153,6 +153,7 @@ async function runCheck(config) {
   if (instances.length > 0) {
     for (const inst of instances) {
       ok(`port ${inst.port}, PID ${inst.pid}, workspace ${inst.workspace}`);
+      if (inst.version) ok(`Plugin: ${inst.version}${inst.location ? dim(` — ${inst.location}`) : ""}`);
     }
   } else {
     fail("No live instances");

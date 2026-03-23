@@ -32,7 +32,9 @@ public class Activator implements BundleActivator {
         server.start();
 
         int port = server.getPort();
-        writeBridgeFile(port, token);
+        String version = context.getBundle().getVersion().toString();
+        String location = context.getBundle().getLocation();
+        writeBridgeFile(port, token, version, location);
 
         Log.info("HTTP server started on port " + port);
     }
@@ -47,8 +49,8 @@ public class Activator implements BundleActivator {
         Log.info("HTTP server stopped");
     }
 
-    private void writeBridgeFile(int port, String token)
-            throws IOException {
+    private void writeBridgeFile(int port, String token,
+            String version, String location) throws IOException {
         String workspace = ResourcesPlugin.getWorkspace().getRoot()
                 .getLocation().toOSString();
         long pid = ProcessHandle.current().pid();
@@ -65,6 +67,8 @@ public class Activator implements BundleActivator {
                 .put("token", token)
                 .put("pid", pid)
                 .put("workspace", workspace)
+                .put("version", version)
+                .put("location", location)
                 .toString() + "\n";
 
         Files.writeString(bridgeFile, content);
