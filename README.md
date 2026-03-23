@@ -37,19 +37,49 @@ jdt test com.example.service.OrderServiceTest testCalculateTotal
 
 ## Getting started
 
-Prerequisites: Node.js >= 20, Java, Maven, Eclipse IDE.
+### 1. Install the CLI
+
+Prerequisites: Node.js >= 20, Eclipse IDE.
 
 ```bash
 git clone https://github.com/kaluchi/jdtbridge.git
 cd jdtbridge/cli
 npm install
 npm link          # registers global `jdt` and `jdtbridge` commands
-jdt setup         # builds plugin, installs into Eclipse
 ```
 
-`jdt setup` handles everything: Maven build with tests, stops Eclipse if running, installs the plugin via p2, restarts Eclipse with the same workspace.
+### 2. Install the plugin
 
-After pulling updates, run `jdt setup` again.
+**Option A — from Eclipse Marketplace** (recommended):
+
+Install [JDT Bridge from Marketplace](https://marketplace.eclipse.org/content/jdt-bridge), or drag the install button into a running Eclipse. Then tell the CLI where Eclipse lives:
+
+```bash
+jdt setup --eclipse /path/to/eclipse
+```
+
+**Option B — via Update Site:**
+
+In Eclipse: `Help` → `Install New Software…` → `Add…`, paste the URL below and follow the wizard:
+
+```
+https://kaluchi.github.io/jdtbridge/
+```
+
+**Option C — from source** (for contributors):
+
+```bash
+jdt setup         # builds plugin with Maven, installs into Eclipse, restarts
+```
+
+After pulling updates, run `jdt setup` again to rebuild and reinstall.
+
+### Verify
+
+```bash
+jdt setup --check   # shows Eclipse, plugin, bridge, and CLI status
+jdt projects        # lists workspace projects — you're all set
+```
 
 ## Why CLI, not MCP?
 
