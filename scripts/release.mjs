@@ -111,5 +111,4 @@ console.log("\nPushing...");
 run(`git push origin master ${tag}`);
 
 console.log(`\n✓ Released ${version}`);
-console.log(`  CI will deploy the p2 site to GitHub Pages.`);
-console.log(`  Create GitHub release: gh release create ${tag} --generate-notes`);
+console.log(`  CI will: build, test, npm publish, deploy p2 site, create GitHub Release.`);
