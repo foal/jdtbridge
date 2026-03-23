@@ -137,10 +137,6 @@ async function runCheck(config) {
     );
     const profile = detectProfile(eclipsePath);
     (profile ? ok : fail)(`Profile: ${profile || "not found"}`);
-    const installed = getInstalledVersion(eclipsePath, BUNDLE_ID);
-    (installed ? ok : fail)(
-      installed ? `Plugin: ${installed}` : "Plugin: not installed",
-    );
     const running = isEclipseRunning();
     (running ? ok : info)(running ? "Running" : "Not running");
   } else {
