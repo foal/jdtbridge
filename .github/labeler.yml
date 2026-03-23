@@ -1,0 +1,24 @@
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'docs/**'
+
+cli:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'cli/**'
+
+plugin:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'plugin/**'
+          - 'plugin.tests/**'
+          - 'feature/**'
+          - 'site/**'
+          - 'branding/**'
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
