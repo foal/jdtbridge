@@ -16,6 +16,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: cli/package-lock.json
+          registry-url: https://registry.npmjs.org
 
       - run: cd cli && npm ci && npm test
 
@@ -43,6 +44,15 @@ jobs:
         with:
           name: p2-repository
           path: site/target/repository/
+
+      - name: Publish CLI to npm
+        run: |
+          cd cli
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   deploy:
     name: Deploy to GitHub Pages

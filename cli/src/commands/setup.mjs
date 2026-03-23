@@ -9,6 +9,9 @@ import { readConfig, writeConfig } from "../home.mjs";
 import { discoverInstances } from "../discovery.mjs";
 import { green, red, bold, dim } from "../color.mjs";
 import { parseFlags } from "../args.mjs";
+import { createRequire } from "node:module";
+
+const { version: cliVersion } = createRequire(import.meta.url)("../../package.json");
 import {
   eclipseExe,
   isEclipseRunning,
@@ -79,6 +82,7 @@ function checkMaven() {
 
 function showPrereqs() {
   console.log(bold("Prerequisites"));
+  ok(`CLI ${cliVersion}`);
   const checks = [checkNode(), checkJava(), checkMaven()];
   for (const c of checks) (c.ok ? ok : fail)(c.label);
   return checks.every((c) => c.ok);
