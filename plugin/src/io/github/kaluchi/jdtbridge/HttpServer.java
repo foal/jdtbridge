@@ -31,6 +31,7 @@ public class HttpServer {
     private final EditorHandler editor = new EditorHandler();
     private final TestHandler testHandler = new TestHandler();
     private final ProjectHandler projectInfo = new ProjectHandler();
+    private final WelcomeHandler welcome = new WelcomeHandler();
     private final ExecutorService executor =
             Executors.newFixedThreadPool(4, r -> {
                 Thread t = new Thread(r, "jdtbridge-req");
@@ -50,6 +51,10 @@ public class HttpServer {
 
         static Response text(String body, Map<String, String> headers) {
             return new Response("text/plain", headers, body);
+        }
+
+        static Response html(String body) {
+            return new Response("text/html", Map.of(), body);
         }
     }
 
@@ -110,27 +115,36 @@ public class HttpServer {
             String[] parts = requestLine.split(" ");
             if (parts.length < 2) return;
 
+            String method = parts[0];
+
             // Read headers
             String authHeader = null;
+            int contentLength = 0;
             String line;
             while ((line = reader.readLine()) != null
                     && !line.isEmpty()) {
                 if (line.regionMatches(true, 0,
                         "Authorization:", 0, 14)) {
                     authHeader = line.substring(14).trim();
+                } else if (line.regionMatches(true, 0,
+                        "Content-Length:", 0, 15)) {
+                    contentLength = Integer.parseInt(
+                            line.substring(15).trim());
                 }
             }
 
-            // Token auth check
-            if (token != null && !token.isEmpty()) {
-                String expected = "Bearer " + token;
-                if (authHeader == null
-                        || !MessageDigest.isEqual(
-                                expected.getBytes(StandardCharsets.UTF_8),
-                                authHeader.getBytes(StandardCharsets.UTF_8))) {
-                    sendError(socket, 401, "Unauthorized");
-                    return;
+            // Read POST body
+            String body = null;
+            if (contentLength > 0) {
+                char[] buf = new char[contentLength];
+                int read = 0;
+                while (read < contentLength) {
+                    int n = reader.read(buf, read,
+                            contentLength - read);
+                    if (n < 0) break;
+                    read += n;
                 }
+                body = new String(buf, 0, read);
             }
 
             String fullPath = parts[1];
@@ -143,6 +157,25 @@ public class HttpServer {
             } else {
                 path = fullPath;
                 params = Map.of();
+            }
+
+            // Status endpoints — no auth required (loopback only)
+            if (path.startsWith("/status")) {
+                Response resp = dispatchStatus(path, method, body);
+                sendResponse(socket, resp);
+                return;
+            }
+
+            // Token auth check
+            if (token != null && !token.isEmpty()) {
+                String expected = "Bearer " + token;
+                if (authHeader == null
+                        || !MessageDigest.isEqual(
+                                expected.getBytes(StandardCharsets.UTF_8),
+                                authHeader.getBytes(StandardCharsets.UTF_8))) {
+                    sendError(socket, 401, "Unauthorized");
+                    return;
+                }
             }
 
             Response resp = dispatch(path, params);
@@ -172,6 +205,23 @@ public class HttpServer {
         out.write(header.toString().getBytes(StandardCharsets.UTF_8));
         out.write(bodyBytes);
         out.flush();
+    }
+
+    private Response dispatchStatus(String path, String method,
+            String body) {
+        try {
+            if ("/status".equals(path) && "GET".equals(method)) {
+                return welcome.handleStatus();
+            }
+            if ("/status/dismiss".equals(path)
+                    && "POST".equals(method)) {
+                return welcome.handleDismiss();
+            }
+            return Response.json(Json.error("Not found: " + path));
+        } catch (Exception e) {
+            Log.error("Status handler error", e);
+            return Response.json(Json.error(e.getMessage()));
+        }
     }
 
     private Response dispatch(String path, Map<String, String> params) {

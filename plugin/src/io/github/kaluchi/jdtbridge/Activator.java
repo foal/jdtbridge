@@ -121,6 +121,10 @@ public class Activator implements BundleActivator {
         }
     }
 
+    static Path getHome() {
+        return resolveHome();
+    }
+
     static String generateToken() {
         byte[] bytes = new byte[TOKEN_BYTES];
         new SecureRandom().nextBytes(bytes);
