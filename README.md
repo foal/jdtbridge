@@ -52,11 +52,7 @@ npm link          # registers global `jdt` and `jdtbridge` commands
 
 **Option A — from Eclipse Marketplace** (recommended):
 
-Install [JDT Bridge from Marketplace](https://marketplace.eclipse.org/content/jdt-bridge), or drag the install button into a running Eclipse. Then tell the CLI where Eclipse lives:
-
-```bash
-jdt setup --eclipse /path/to/eclipse
-```
+Install [JDT Bridge from Marketplace](https://marketplace.eclipse.org/content/jdt-bridge), or drag the install button into a running Eclipse.
 
 **Option B — via Update Site:**
 
@@ -69,7 +65,7 @@ https://kaluchi.github.io/jdtbridge/
 **Option C — from source** (for contributors):
 
 ```bash
-jdt setup         # builds plugin with Maven, installs into Eclipse, restarts
+jdt setup         # builds plugin with Maven, installs into Eclipse (restarts if running)
 ```
 
 After pulling updates, run `jdt setup` again to rebuild and reinstall.
