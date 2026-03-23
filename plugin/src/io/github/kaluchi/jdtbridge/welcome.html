@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JDT Bridge — Welcome</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+  .card { max-width: 600px; background: #16213e; border-radius: 12px; padding: 2.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .header { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+  .icon { width: 48px; height: 48px; flex-shrink: 0; }
+  h1 { font-size: 1.6rem; color: #f7941e; }
+  .version { font-size: 0.85rem; color: #888; margin-bottom: 1.5rem; }
+  p { line-height: 1.6; margin-bottom: 1.2rem; color: #ccc; }
+  .status { display: flex; align-items: center; gap: 0.5rem; padding: 0.8rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.95rem; }
+  .status.ok { background: #0f3460; border: 1px solid #2ecc7144; color: #2ecc71; }
+  .status.warn { background: #0f3460; border: 1px solid #f7941e44; color: #f7941e; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.green { background: #2ecc71; }
+  .dot.orange { background: #f7941e; }
+  .install-box { background: #0f3460; border: 1px solid #f7941e44; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
+  .install-box .label { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+  .install-box .cmd { display: flex; align-items: center; gap: 0.5rem; }
+  .install-box code { font-size: 1rem; color: #f7941e; cursor: pointer; flex: 1; }
+  .install-box code:hover { text-decoration: underline; }
+  .install-box .copied { font-size: 0.8rem; color: #2ecc71; opacity: 0; transition: opacity 0.2s; }
+  .install-box .copied.show { opacity: 1; }
+  .install-box .hint { font-size: 0.75rem; color: #666; margin-top: 0.4rem; }
+  .install-box .refresh { display: inline-block; margin-top: 0.8rem; color: #f7941e; text-decoration: none; font-size: 0.85rem; cursor: pointer; }
+  .install-box .refresh:hover { text-decoration: underline; }
+  .steps { margin-bottom: 1.5rem; padding-left: 1.5rem; }
+  .steps li { margin-bottom: 0.5rem; line-height: 1.5; color: #ccc; }
+  .steps code { background: #0f3460; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.9rem; color: #e0e0e0; }
+  .dismiss { display: flex; align-items: center; gap: 0.5rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #ffffff15; cursor: pointer; }
+  .dismiss input { cursor: pointer; }
+  .dismiss label { font-size: 0.85rem; color: #888; cursor: pointer; }
+  .dismiss.saved label { color: #2ecc71; }
+  .links { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; }
+  .links a { color: #f7941e; text-decoration: none; padding: 0.4rem 0.8rem; border: 1px solid #f7941e44; border-radius: 6px; font-size: 0.85rem; transition: all 0.2s; }
+  .links a:hover { background: #f7941e; color: #1a1a2e; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <svg class="icon" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="6" fill="#2C2255"/>
+      <path d="M6 22 L6 14 A 10 10 0 0 1 26 14 L26 22" stroke="#F7941E" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="6" cy="22" r="2.5" fill="#F7941E"/>
+      <circle cx="26" cy="22" r="2.5" fill="#F7941E"/>
+    </svg>
+    <h1>JDT Bridge</h1>
+  </div>
+  <div class="version">Plugin {{version}}</div>
+
+  <div class="status ok">
+    <div class="dot green"></div>
+    Bridge running on port {{port}}
+  </div>
+
+  <div id="cli-ok" class="status ok" style="display:none">
+    <div class="dot green"></div>
+    <span>CLI <span id="cli-ver"></span> installed</span>
+  </div>
+
+  <div id="cli-missing" style="display:none">
+    <p>The Eclipse plugin is running. Install the CLI to get semantic Java analysis in your terminal and AI coding assistants.</p>
+    <div class="install-box">
+      <div class="label">Install the CLI</div>
+      <div class="cmd">
+        <code id="install-cmd">npm install -g @kaluchi/jdtbridge</code>
+        <span class="copied" id="copied">Copied!</span>
+      </div>
+      <div class="hint">Click to copy &middot; requires Node.js 20+</div>
+      <a class="refresh" href="/status">Installed? Check again</a>
+    </div>
+  </div>
+
+  <div id="cli-ready" style="display:none">
+    <p>Everything is set up. Try these commands in your terminal:</p>
+  </div>
+
+  <ol class="steps">
+    <li>Run <code>jdt setup --check</code> to verify the connection</li>
+    <li>Run <code>jdt projects</code> to list workspace projects</li>
+    <li>Run <code>jdt find "*Test*"</code> to search for types</li>
+  </ol>
+
+  <div class="links">
+    <a href="https://github.com/kaluchi/jdtbridge">GitHub</a>
+    <a href="https://github.com/kaluchi/jdtbridge#getting-started">Getting Started</a>
+    <a href="https://github.com/kaluchi/jdtbridge/releases">Releases</a>
+  </div>
+
+  <div class="dismiss" id="dismiss">
+    <input type="checkbox" id="dismiss-check">
+    <label for="dismiss-check">Don't show this on startup</label>
+  </div>
+</div>
+
+<script>
+(function() {
+  var installed = {{cliInstalled}};
+  var version = "{{cliVersion}}";
+
+  if (installed) {
+    document.getElementById('cli-ok').style.display = 'flex';
+    document.getElementById('cli-ver').textContent = version;
+    document.getElementById('cli-ready').style.display = 'block';
+  } else {
+    document.getElementById('cli-missing').style.display = 'block';
+  }
+
+  document.getElementById('install-cmd').addEventListener('click', function() {
+    navigator.clipboard.writeText('npm install -g @kaluchi/jdtbridge');
+    var el = document.getElementById('copied');
+    el.classList.add('show');
+    setTimeout(function() { el.classList.remove('show'); }, 2000);
+  });
+
+  document.getElementById('dismiss-check').addEventListener('change', function() {
+    if (this.checked) {
+      fetch('/status/dismiss', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.ok) {
+            document.getElementById('dismiss').classList.add('saved');
+          }
+        });
+    }
+  });
+})();
+</script>
+</body>
+</html>

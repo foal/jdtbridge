@@ -2,6 +2,7 @@ package io.github.kaluchi.jdtbridge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -48,7 +49,6 @@ public class ActivatorTest {
 
     @Test
     public void bridgeFileJsonFormat() {
-        // Simulate what Activator.writeBridgeFile() produces (JSON)
         String json = Json.object()
                 .put("port", 12345)
                 .put("token", "abcdef0123456789abcdef0123456789")
@@ -58,11 +58,16 @@ public class ActivatorTest {
                 .put("location", "reference:file:plugins/io.github.kaluchi.jdtbridge_1.0.0.jar")
                 .toString();
 
-        // Parse like CLI does: JSON.parse
-        assertTrue(json.contains("\"port\":12345"));
-        assertTrue(json.contains("\"version\":\"1.0.0.202603181541\""));
-        assertTrue(json.contains("\"location\":\"reference:file:plugins/"));
-        assertTrue(json.contains("\"workspace\":\"D:\\\\eclipse-workspace\""));
+        var map = Json.parse(json);
+        assertEquals(12345, Json.getInt(map, "port", 0));
+        assertEquals("abcdef0123456789abcdef0123456789",
+                Json.getString(map, "token"));
+        assertEquals("D:\\eclipse-workspace",
+                Json.getString(map, "workspace"));
+        assertEquals("1.0.0.202603181541",
+                Json.getString(map, "version"));
+        assertTrue(Json.getString(map, "location")
+                .startsWith("reference:file:plugins/"));
     }
 
     @Test
@@ -80,12 +85,13 @@ public class ActivatorTest {
                     .toString() + "\n";
             Files.writeString(tempFile, content);
 
-            String read = Files.readString(tempFile).trim();
-            // Verify round-trip: must contain all fields
-            assertTrue(read.contains("\"port\":54321"));
-            assertTrue(read.contains("\"token\":\"" + token + "\""));
-            assertTrue(read.contains("\"version\":\"1.0.0.qualifier\""));
-            assertTrue(read.contains("\"location\":\"reference:file:dropins/"));
+            var map = Json.parse(Files.readString(tempFile));
+            assertEquals(54321, Json.getInt(map, "port", 0));
+            assertEquals(token, Json.getString(map, "token"));
+            assertEquals("1.0.0.qualifier",
+                    Json.getString(map, "version"));
+            assertTrue(Json.getString(map, "location")
+                    .startsWith("reference:file:dropins/"));
         } finally {
             Files.deleteIfExists(tempFile);
         }
@@ -102,12 +108,13 @@ public class ActivatorTest {
                 .put("location", "file:plugins/bundle.jar")
                 .toString();
 
-        assertTrue(json.contains("\"port\":"), "Must have port");
-        assertTrue(json.contains("\"token\":"), "Must have token");
-        assertTrue(json.contains("\"pid\":"), "Must have pid");
-        assertTrue(json.contains("\"workspace\":"), "Must have workspace");
-        assertTrue(json.contains("\"version\":"), "Must have version");
-        assertTrue(json.contains("\"location\":"), "Must have location");
+        var map = Json.parse(json);
+        assertNotEquals(0, Json.getInt(map, "port", 0), "Must have port");
+        assertNotNull(Json.getString(map, "token"), "Must have token");
+        assertTrue(map.containsKey("pid"), "Must have pid");
+        assertNotNull(Json.getString(map, "workspace"), "Must have workspace");
+        assertNotNull(Json.getString(map, "version"), "Must have version");
+        assertNotNull(Json.getString(map, "location"), "Must have location");
     }
 
     // ---- Helpers ----
