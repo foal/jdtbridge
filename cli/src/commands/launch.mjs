@@ -144,14 +144,17 @@ Output: name, type, mode, status — one launch per line.`;
 
 export const launchConsoleHelp = `Show console output (stdout/stderr) of a launch.
 
+Returns the full unbounded output. Pipe through tail/grep/head to filter.
+
 Usage:  jdt launch console <name> [--tail N] [--stderr] [--stdout]
 
 Flags:
-  --tail <N>    last N lines only
+  --tail <N>    last N lines only (or use: jdt launch console m8-server | tail -50)
   --stderr      stderr only
   --stdout      stdout only
 
 Examples:
   jdt launch console m8-server
-  jdt launch console m8-server --tail 50
+  jdt launch console m8-server | tail -20
+  jdt launch console m8-server | grep ERROR
   jdt launch console ObjectMapperTest --stderr`;
