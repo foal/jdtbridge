@@ -89,7 +89,7 @@ jdt err --project my-server | head -5
 jdt src com.example.util.StringHelper#normalize | grep -A2 'throw'
 
 # Chain semantic queries with standard tools.
-jdt find '*Controller' | xargs -I{} jdt refs {}#handleRequest | sort -u
+jdt find '*Controller' | awk '{print $1}' | xargs -I{} jdt refs {}#handleRequest
 ```
 
 An agent's context window is finite. Every irrelevant token displaces useful reasoning. MCP's [own community recognizes this](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1576) — token bloat from tool schemas and unfiltered results is a known problem, with projects like [model-context-shell](https://github.com/StacklokLabs/model-context-shell) trying to retrofit Unix-style pipes onto MCP.
