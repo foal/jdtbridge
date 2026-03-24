@@ -80,16 +80,16 @@ MCP is the natural first thought for connecting an IDE to an AI agent. But JDT B
 jdt ti com.example.dao.FileRepository | grep -i folder
 
 # "How many call sites?" — you need a number, not 200 lines of references.
-jdt refs com.example.core.Event dispatch | wc -l
+jdt refs com.example.core.Event#dispatch | wc -l
 
 # 47 compilation errors, but you're fixing them one at a time.
 jdt err --project my-server | head -5
 
 # Find where a method throws without reading all 80 lines of source.
-jdt src com.example.util.StringHelper normalize | grep -A2 'throw'
+jdt src com.example.util.StringHelper#normalize | grep -A2 'throw'
 
 # Chain semantic queries with standard tools.
-jdt find '*Controller' | xargs -I{} jdt refs {} handleRequest | sort -u
+jdt find '*Controller' | xargs -I{} jdt refs {}#handleRequest | sort -u
 ```
 
 An agent's context window is finite. Every irrelevant token displaces useful reasoning. MCP's [own community recognizes this](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1576) — token bloat from tool schemas and unfiltered results is a known problem, with projects like [model-context-shell](https://github.com/StacklokLabs/model-context-shell) trying to retrofit Unix-style pipes onto MCP.

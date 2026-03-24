@@ -80,9 +80,9 @@ Run `jdt help <command>` for detailed flags and examples.
 
 ```bash
 jdt type-info com.example.dao.FileRepository | grep -i folder   # 65 methods → just folder ops
-jdt refs com.example.core.Event dispatch | wc -l                 # count, not 200 lines
+jdt refs com.example.core.Event#dispatch | wc -l                 # count, not 200 lines
 jdt errors --project my-server | head -5                         # one error at a time
-jdt source com.example.util.StringHelper normalize | grep throw  # find throws without reading all
+jdt source com.example.util.StringHelper#normalize | grep throw  # find throws without reading all
 ```
 
 ## Project structure
