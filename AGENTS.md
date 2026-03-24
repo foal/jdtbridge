@@ -42,7 +42,7 @@ The `jdt` CLI gives you the same semantic understanding of Java code that a deve
 ```
 jdt projects                              list workspace projects
 jdt project-info <name>                   project overview (packages, types, methods)
-jdt find <Name|*Pattern*> [--source-only] find type declarations
+jdt find <Name|*Pattern*|pkg> [--source-only] find types by name, wildcard, or package
 jdt refs <FQN> [method] [--field <name>]  references to type/method/field
 jdt subtypes <FQN>                        all subtypes/implementors
 jdt hierarchy <FQN>                       supers + interfaces + subtypes

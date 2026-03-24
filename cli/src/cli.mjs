@@ -98,7 +98,7 @@ Requires: Eclipse running with the jdtbridge plugin.
 Search & navigation:
   projects                                    list workspace projects
   project-info${fmtAliases("project-info")} <name> [--lines N]             project overview (adaptive detail)
-  find <Name|*Pattern*> [--source-only]       find type declarations
+  find <Name|*Pattern*|pkg> [--source-only]   find types by name, wildcard, or package
   references${fmtAliases("references")} <FQN> [method] [--field <name>]  references to type/method/field
   subtypes${fmtAliases("subtypes")} <FQN>                              all subtypes/implementors
   hierarchy${fmtAliases("hierarchy")} <FQN>                             full hierarchy (supers + interfaces + subtypes)

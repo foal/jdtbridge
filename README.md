@@ -108,7 +108,7 @@ Most commands have short aliases for quick typing.
 |---------|-------|-------------|
 | `projects` | | List workspace projects |
 | `project-info <name>` | `pi` | Project overview (packages, types, methods) |
-| `find <Name>` | | Find type declarations (supports `*wildcards*`) |
+| `find <Name\|package>` | | Find types by name, wildcard, or package |
 | `references <FQN> [method]` | `refs` | All references to a type, method, or field |
 | `subtypes <FQN>` | `subt` | All subtypes and implementors |
 | `hierarchy <FQN>` | `hier` | Full type hierarchy (supers + subs) |

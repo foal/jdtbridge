@@ -71,6 +71,39 @@ public class SearchIntegrationTest {
         assertEquals("[]", json);
     }
 
+    @Test
+    public void findByPackage() throws Exception {
+        String json = handler.handleFind(
+                Map.of("name", "test.model"));
+        assertTrue(json.contains("test.model.Animal"),
+                "Should find Animal in package: " + json);
+        assertTrue(json.contains("test.model.Dog"),
+                "Should find Dog in package: " + json);
+    }
+
+    @Test
+    public void findByPackageTrailingDot() throws Exception {
+        String json = handler.handleFind(
+                Map.of("name", "test.model."));
+        assertTrue(json.contains("test.model.Animal"),
+                "Should find Animal: " + json);
+    }
+
+    @Test
+    public void findByPackageTrailingDotStar() throws Exception {
+        String json = handler.handleFind(
+                Map.of("name", "test.model.*"));
+        assertTrue(json.contains("test.model.Animal"),
+                "Should find Animal: " + json);
+    }
+
+    @Test
+    public void findByPackageNonExistent() throws Exception {
+        String json = handler.handleFind(
+                Map.of("name", "no.such.package"));
+        assertEquals("[]", json);
+    }
+
     // ---- /subtypes ----
 
     @Test

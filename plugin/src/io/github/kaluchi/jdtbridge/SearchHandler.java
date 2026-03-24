@@ -14,6 +14,7 @@ import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMember;
 import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.core.ISourceRange;
 import org.eclipse.jdt.core.IType;
@@ -50,6 +51,12 @@ class SearchHandler {
         }
 
         boolean sourceOnly = params.containsKey("source");
+
+        // Dotted name without wildcards — package search
+        if (isPackageSearch(name)) {
+            return findByPackage(normalizePackage(name), sourceOnly);
+        }
+
         int matchRule = (name.contains("*") || name.contains("?"))
                 ? SearchPattern.R_PATTERN_MATCH
                         | SearchPattern.R_CASE_SENSITIVE
@@ -86,6 +93,73 @@ class SearchHandler {
                 },
                 null);
 
+        return arr.toString();
+    }
+
+    /**
+     * Detect package search patterns:
+     * - "app.m8.core.user" — dots, no wildcards, last segment lowercase
+     * - "app.m8.core.user." — trailing dot
+     * - "app.m8.core.user.*" — package + wildcard
+     */
+    static boolean isPackageSearch(String name) {
+        String normalized = normalizePackage(name);
+        if (!normalized.contains(".")) return false;
+        String last = normalized.substring(
+                normalized.lastIndexOf('.') + 1);
+        return !last.isEmpty()
+                && Character.isLowerCase(last.charAt(0));
+    }
+
+    /** Strip trailing ".", ".*", ".?" */
+    static String normalizePackage(String name) {
+        if (name.endsWith(".*") || name.endsWith(".?")) {
+            return name.substring(0, name.length() - 2);
+        }
+        if (name.endsWith(".")) {
+            return name.substring(0, name.length() - 1);
+        }
+        return name;
+    }
+
+    private String findByPackage(String pkgName, boolean sourceOnly)
+            throws CoreException {
+        Json arr = Json.array();
+        for (IJavaProject jp : JavaCore.create(
+                ResourcesPlugin.getWorkspace().getRoot())
+                .getJavaProjects()) {
+            for (IPackageFragmentRoot root
+                    : jp.getPackageFragmentRoots()) {
+                if (sourceOnly
+                        && root.getKind()
+                                != IPackageFragmentRoot.K_SOURCE) {
+                    continue;
+                }
+                IPackageFragment pkg = root.getPackageFragment(
+                        pkgName);
+                if (!pkg.exists()) continue;
+                for (ICompilationUnit cu
+                        : pkg.getCompilationUnits()) {
+                    for (IType type : cu.getTypes()) {
+                        arr.add(Json.object()
+                                .put("fqn",
+                                        type.getFullyQualifiedName())
+                                .put("file",
+                                        resourcePath(type)));
+                    }
+                }
+                if (!sourceOnly) {
+                    for (var cf : pkg.getClassFiles()) {
+                        IType type = cf.getType();
+                        arr.add(Json.object()
+                                .put("fqn",
+                                        type.getFullyQualifiedName())
+                                .put("file", type.getPath()
+                                        .toOSString()));
+                    }
+                }
+            }
+        }
         return arr.toString();
     }
 
@@ -599,5 +673,15 @@ class SearchHandler {
         return match.getResource() != null
                 ? match.getResource().getFullPath().toString()
                 : "?";
+    }
+
+    private static String resourcePath(IType type) {
+        try {
+            ICompilationUnit cu = type.getCompilationUnit();
+            if (cu != null && cu.getResource() != null) {
+                return cu.getResource().getFullPath().toString();
+            }
+        } catch (Exception e) { /* fall through */ }
+        return type.getPath().toString();
     }
 }

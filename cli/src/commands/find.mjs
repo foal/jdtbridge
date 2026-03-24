@@ -25,17 +25,20 @@ export async function find(args) {
   }
 }
 
-export const help = `Find type declarations by name or wildcard pattern.
+export const help = `Find type declarations by name, wildcard, or package.
 
-Usage:  jdt find <Name|*Pattern*> [--source-only]
+Usage:  jdt find <Name|*Pattern*|package.name> [--source-only]
 
 Arguments:
-  Name        exact type name (e.g. DataSourceUtils)
-  *Pattern*   wildcard pattern (e.g. *Controller*, Find*)
+  Name           exact type name (e.g. DataSourceUtils)
+  *Pattern*      wildcard pattern (e.g. *Controller*, Find*)
+  package.name   dotted package name — lists all types in the package
 
 Flags:
   --source-only   exclude binary/library types, show only workspace sources
 
 Examples:
   jdt find DataSourceUtils
-  jdt find *Controller* --source-only`;
+  jdt find *Controller* --source-only
+  jdt find com.example.service
+  jdt find com.example.service.`;
