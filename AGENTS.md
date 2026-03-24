@@ -79,10 +79,10 @@ Run `jdt help <command>` for detailed flags and examples.
 `jdt` output flows through the shell — filter it to save context:
 
 ```bash
-jdt type-info com.example.dao.FileRepository | grep -i folder   # 65 methods → just folder ops
-jdt refs com.example.core.Event#dispatch | wc -l                 # count, not 200 lines
+jdt ti io.github.kaluchi.jdtbridge.SearchHandler | grep handle   # 26 methods → just the 8 handlers
+jdt refs io.github.kaluchi.jdtbridge.JdtUtils#findMethod | wc -l # count, not 51 lines
 jdt errors --project my-server | head -5                         # one error at a time
-jdt source com.example.util.StringHelper#normalize | grep throw  # find throws without reading all
+jdt src org.springframework.jdbc.core.JdbcTemplate#query | grep -n throw  # find throws in library code
 ```
 
 ## Project structure

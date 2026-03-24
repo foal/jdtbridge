@@ -75,21 +75,21 @@ MCP is the natural first thought for connecting an IDE to an AI agent. But JDT B
 **Pipe composability is the killer feature.** MCP tool results go straight into the agent's context window, unfiltered. CLI output flows through the shell first:
 
 ```bash
-# A 65-method DAO class, but you only care about folder operations.
-# MCP: all 65 methods enter context. CLI: just the 27 that matter.
-jdt ti com.example.dao.FileRepository | grep -i folder
+# 26-method class — only the handler entry points.
+# MCP: all 26 methods enter context. CLI: just the 8 that matter.
+jdt ti io.github.kaluchi.jdtbridge.SearchHandler | grep handle
 
-# "How many call sites?" — you need a number, not 200 lines of references.
-jdt refs com.example.core.Event#dispatch | wc -l
+# "How many callers?" — a number, not 51 lines of references.
+jdt refs io.github.kaluchi.jdtbridge.JdtUtils#findMethod | wc -l
 
-# 47 compilation errors, but you're fixing them one at a time.
+# First 5 compilation errors — fix one at a time.
 jdt err --project my-server | head -5
 
-# Find where a method throws without reading all 80 lines of source.
-jdt src com.example.util.StringHelper#normalize | grep -A2 'throw'
+# Where does this Spring method throw or catch?
+jdt src org.springframework.jdbc.core.JdbcTemplate#query | grep -n 'throw\|catch'
 
-# Chain semantic queries with standard tools.
-jdt find '*Controller' | awk '{print $1}' | xargs -I{} jdt refs {}#handleRequest
+# All subtypes of a Spring base class — including library internals.
+jdt subtypes org.springframework.jdbc.object.SqlOperation
 ```
 
 An agent's context window is finite. Every irrelevant token displaces useful reasoning. MCP's [own community recognizes this](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1576) — token bloat from tool schemas and unfiltered results is a known problem, with projects like [model-context-shell](https://github.com/StacklokLabs/model-context-shell) trying to retrofit Unix-style pipes onto MCP.
