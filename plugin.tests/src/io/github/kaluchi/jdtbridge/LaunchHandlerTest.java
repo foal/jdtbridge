@@ -328,6 +328,81 @@ public class LaunchHandlerTest {
     }
 
     @Nested
+    class ConsoleWithEmptyStreams {
+
+        @Test
+        void emptyStreamsDoNotCrash() throws Exception {
+            // Launch with no process — "No process for launch"
+            ILaunchManager mgr =
+                    DebugPlugin.getDefault().getLaunchManager();
+            ILaunch launch = new org.eclipse.debug.core.Launch(
+                    null, "run", null);
+            mgr.addLaunch(launch);
+            try {
+                String json = handler.handleConsole(
+                        Map.of("name", "(unknown)"));
+                assertTrue(json.contains("No process"),
+                        "Should say no process: " + json);
+            } finally {
+                mgr.removeLaunch(launch);
+            }
+        }
+
+        @Test
+        void processWithStreamsReturnsValidJson() throws Exception {
+            ILaunchManager mgr =
+                    DebugPlugin.getDefault().getLaunchManager();
+            ILaunch launch = new org.eclipse.debug.core.Launch(
+                    null, "run", null);
+            Process proc = new ProcessBuilder(
+                    "java", "-version").start();
+            proc.waitFor(5,
+                    java.util.concurrent.TimeUnit.SECONDS);
+            DebugPlugin.newProcess(launch, proc,
+                    "streams-test");
+            mgr.addLaunch(launch);
+            try {
+                String json = handler.handleConsole(
+                        Map.of("name", "streams-test"));
+                assertFalse(json.contains("error"),
+                        "Should not be error: " + json);
+                assertTrue(json.contains("\"output\""),
+                        "Should have output field: " + json);
+                assertTrue(json.contains("\"terminated\""),
+                        "Should have terminated: " + json);
+            } finally {
+                mgr.removeLaunch(launch);
+            }
+        }
+
+        @Test
+        void consoleOutputContainsTerminatedFlag() throws Exception {
+            ILaunchManager mgr =
+                    DebugPlugin.getDefault().getLaunchManager();
+            ILaunch launch = new org.eclipse.debug.core.Launch(
+                    null, "run", null);
+            Process proc = new ProcessBuilder(
+                    "java", "-version").start();
+            proc.waitFor(5,
+                    java.util.concurrent.TimeUnit.SECONDS);
+            DebugPlugin.newProcess(launch, proc,
+                    "terminated-flag-test");
+            mgr.addLaunch(launch);
+            try {
+                String json = handler.handleConsole(
+                        Map.of("name", "terminated-flag-test"));
+                assertTrue(
+                        json.contains("\"terminated\":true"),
+                        "Should have terminated flag: " + json);
+                assertTrue(json.contains("\"name\""),
+                        "Should have name: " + json);
+            } finally {
+                mgr.removeLaunch(launch);
+            }
+        }
+    }
+
+    @Nested
     class Run {
 
         @Test
