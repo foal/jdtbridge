@@ -152,6 +152,20 @@ jdt test --project io.github.kaluchi.jdtbridge.tests
 cd cli && npm test
 ```
 
+## Releasing
+
+Use the release script in `scripts/release.mjs`. It bumps versions everywhere
+(Tycho + npm), builds, tests, commits, tags, and pushes. CI then deploys
+automatically (npm publish, p2 site, GitHub Release).
+
+```bash
+node scripts/release.mjs 1.3.0          # full release: bump + build + tag + push
+node scripts/release.mjs 1.3.0 --dry    # bump + build, no commit/tag/push
+node scripts/release.mjs 1.3.0 --bump   # bump versions only, no build
+```
+
+The script requires: clean working tree, master branch, tag must not exist.
+
 ## Code style
 
 - Java: Eclipse formatter settings (use `jdt format <file>` to auto-format)
