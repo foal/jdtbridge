@@ -2,7 +2,7 @@
 
 Grep finds strings. JDT Bridge understands Java.
 
-Eclipse's JDT compiler builds a deep semantic index of your code — type hierarchies, cross-project references, method overloads, transitive dependencies. JDT Bridge exposes all of that via the `jdt` CLI, giving AI coding agents (Claude Code, Cursor, etc.) the same understanding of your codebase that a human gets in the IDE.
+Eclipse's JDT compiler builds a deep semantic index of your code — type hierarchies, cross-project references, method overloads, transitive dependencies. JDT Bridge exposes all of that via the `jdt` CLI, giving AI coding agents (Claude Code, OpenCode, Kilo Code, aider) and shell workflows the same understanding of your codebase that a human gets in the IDE.
 
 ## Why it matters
 
@@ -37,47 +37,36 @@ jdt test com.example.service.OrderServiceTest testCalculateTotal
 
 ## Getting started
 
-### 1. Install the CLI
-
 Prerequisites: Node.js >= 20, Eclipse IDE.
 
+### CLI
+
 ```bash
-git clone https://github.com/kaluchi/jdtbridge.git
-cd jdtbridge/cli
-npm install
-npm link          # registers global `jdt` and `jdtbridge` commands
+npm install -g @kaluchi/jdtbridge
 ```
 
-### 2. Install the plugin
+### Plugin
 
-**Option A — from Eclipse Marketplace** (recommended):
-
-Install [JDT Bridge from Marketplace](https://marketplace.eclipse.org/content/jdt-cli-bridge-ai-coding-assistants), or drag the install button into a running Eclipse:
+Install from [Eclipse Marketplace](https://marketplace.eclipse.org/content/jdt-cli-bridge-ai-coding-assistants), or drag the button into a running Eclipse:
 
 <a href="https://marketplace.eclipse.org/marketplace-client-intro?mpc_install=7423866" title="Drag to your running Eclipse workspace — requires Eclipse Marketplace Client"><img src="https://marketplace.eclipse.org/modules/custom/eclipsefdn/eclipsefdn_marketplace/images/btn-install.svg" width="80" alt="Install" /></a>
 
-**Option B — via Update Site:**
-
-In Eclipse: `Help` → `Install New Software…` → `Add…`, paste the URL below and follow the wizard:
+Or add the update site manually — `Help` → `Install New Software…` → `Add…`:
 
 ```
 https://kaluchi.github.io/jdtbridge/
 ```
 
-**Option C — from source** (for contributors):
+### Test drive
 
 ```bash
-jdt setup         # builds plugin with Maven, installs into Eclipse (restarts if running)
+jdt projects        # list workspace projects
+jdt help            # explore available commands
 ```
 
-After pulling updates, run `jdt setup` again to rebuild and reinstall.
+Now introduce it to your AI agent:
 
-### Verify
-
-```bash
-jdt setup --check   # shows Eclipse, plugin, bridge, and CLI status
-jdt projects        # lists workspace projects — you're all set
-```
+> We're working together in Eclipse via the `jdt` CLI — you can see the same projects, source code, compilation errors, and test results that I see in the IDE. We share the same workspace. Run `jdt help` to learn what's available and remember it for future use.
 
 ## Why CLI, not MCP?
 
@@ -107,7 +96,7 @@ An agent's context window is finite. Every irrelevant token displaces useful rea
 
 **Works for everyone.** The same `jdt` command works in your terminal, in shell scripts, in CI, and for any AI agent. MCP requires per-IDE configuration and isn't directly usable by humans. When something goes wrong, you debug by running the same command the agent ran — no log spelunking.
 
-**No lock-in.** Anything that can run a shell command can use `jdt` — Claude Code, Cursor, Windsurf, Copilot, aider, or a plain bash script. MCP support varies by IDE and changes with every release.
+**No lock-in.** Anything that can run a shell command can use `jdt` — Claude Code, OpenCode, Kilo Code, aider, or a plain bash script. No per-IDE configuration, no protocol lock-in.
 
 MCP is the right choice for things like database connections, OAuth flows, or cloud APIs with no CLI equivalent. But for developer tools where output filtering matters and humans benefit too, a CLI wins.
 
@@ -126,6 +115,7 @@ Most commands have short aliases for quick typing.
 | `implementors <FQN> <method>` | `impl` | Implementations of an interface method |
 | `type-info <FQN>` | `ti` | Class overview (fields, methods, signatures) |
 | `source <FQN> [method]` | `src` | Source code — project and library classes |
+| `build [--project <name>]` | `b` | Build project (incremental or clean) |
 | `test <FQN> [method]` | | Run JUnit tests |
 | `errors [--project <name>]` | `err` | Compilation errors and diagnostics |
 | `organize-imports <file>` | `oi` | Organize imports (Eclipse settings) |
@@ -134,6 +124,7 @@ Most commands have short aliases for quick typing.
 | `move <FQN> <package>` | | Move type to another package |
 | `open <FQN> [method]` | | Open in Eclipse editor |
 | `active-editor` | `ae` | Current file and cursor position |
+| `setup [--check\|--remove]` | | Install, check, or remove Eclipse plugin |
 
 Run `jdt help <command>` for detailed flags and options.
 
@@ -163,6 +154,20 @@ Multiple Eclipse instances are supported — each writes its own instance file, 
 
 - **[CLI reference](cli/README.md)** — all commands, flags, options, instance discovery
 - **[HTTP API](plugin/README.md)** — raw endpoint reference for building custom clients
+
+## Building from source
+
+For contributors — clone the repo, link the CLI, build and install the plugin from source:
+
+```bash
+git clone https://github.com/kaluchi/jdtbridge.git
+cd jdtbridge/cli
+npm install && npm link
+jdt setup             # builds plugin with Maven, installs into Eclipse
+jdt setup --check     # verify everything works
+```
+
+After pulling updates, run `jdt setup` again to rebuild and reinstall.
 
 ## Known limitations
 
