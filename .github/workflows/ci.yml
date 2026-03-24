@@ -3,14 +3,35 @@ name: CI
 on:
   push:
     branches: [master]
-    paths-ignore: ['**.md', 'docs/**', 'scripts/**', 'LICENSE']
   pull_request:
     branches: [master]
-    paths-ignore: ['**.md', 'docs/**', 'scripts/**', 'LICENSE']
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'cli/**'
+              - 'plugin/**'
+              - 'plugin.tests/**'
+              - 'feature/**'
+              - 'site/**'
+              - 'branding/**'
+              - 'pom.xml'
+              - '*.target'
+
   cli:
     name: CLI tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -29,6 +50,8 @@ jobs:
 
   plugin:
     name: Plugin build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
