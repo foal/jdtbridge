@@ -248,15 +248,25 @@ class LaunchHandler {
         StringBuilder output = new StringBuilder();
         for (IProcess proc : processes) {
             IStreamsProxy proxy = proc.getStreamsProxy();
-            if (proxy == null) continue;
-
-            if (!"stderr".equals(stream)) {
-                appendStream(proxy.getOutputStreamMonitor(),
-                        output);
+            if (proxy != null) {
+                if (!"stderr".equals(stream)) {
+                    appendStream(
+                            proxy.getOutputStreamMonitor(),
+                            output);
+                }
+                if (!"stdout".equals(stream)) {
+                    appendStream(
+                            proxy.getErrorStreamMonitor(),
+                            output);
+                }
             }
-            if (!"stdout".equals(stream)) {
-                appendStream(proxy.getErrorStreamMonitor(),
-                        output);
+        }
+
+        // Fallback: read from UI console if streams were empty
+        if (output.isEmpty()) {
+            String consoleText = readProcessConsole(processes[0]);
+            if (consoleText != null) {
+                output.append(consoleText);
             }
         }
 
@@ -282,6 +292,29 @@ class LaunchHandler {
             if (name.equals(launchName(launches[i]))) {
                 return launches[i];
             }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("restriction")
+    private String readProcessConsole(IProcess process) {
+        try {
+            var consoles = org.eclipse.ui.console.ConsolePlugin
+                    .getDefault().getConsoleManager().getConsoles();
+            for (var console : consoles) {
+                if (console instanceof
+                        org.eclipse.debug.internal.ui.views
+                                .console.ProcessConsole pc) {
+                    if (pc.getProcess() == process) {
+                        var doc = pc.getDocument();
+                        if (doc != null) {
+                            return doc.get();
+                        }
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            // UI console not available
         }
         return null;
     }
