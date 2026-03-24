@@ -32,7 +32,7 @@ Run `jdt help <command>` for detailed flags and examples. Most commands have sho
 ```bash
 jdt projects                                           # list workspace projects
 jdt project-info <name> [--lines N]                    # (alias: pi) project overview
-jdt find <Name> [--source-only]                        # find type declarations (* wildcards)
+jdt find <Name|package> [--source-only]                 # find types by name, wildcard, or package
 jdt references <FQN> [method] [--field <name>]         # (alias: refs) references to type/method/field
 jdt subtypes <FQN>                                     # (alias: subt) all subtypes/implementors
 jdt hierarchy <FQN>                                    # (alias: hier) supers + interfaces + subtypes
