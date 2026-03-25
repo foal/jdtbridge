@@ -11,20 +11,28 @@ Required tools (verified by `jdt setup --check`):
 ### Eclipse source bundles (recommended)
 
 `jdt source` needs source bundles to read Eclipse Platform/JDT API source
-and javadoc. Without them, `jdt source org.eclipse.debug.core.model.IStreamMonitor`
-returns "Source not available". Install once (Eclipse must be closed):
+and javadoc. Without them, `jdt source org.eclipse.core.runtime.CoreException`
+returns "Source not available". Install all Eclipse source bundles once
+(Eclipse must NOT be running):
 
 ```bash
+# List available source bundles, filter out tests, install all
+BUNDLES=$(D:/eclipse/eclipsec.exe -nosplash \
+  -application org.eclipse.equinox.p2.director \
+  -repository "https://download.eclipse.org/eclipse/updates/4.39/" \
+  -list 2>&1 | grep "^org\.eclipse\..*\.source=" | grep -v "tests\.\|examples\." \
+  | sed 's/=.*//' | tr '\n' ',' | sed 's/,$//')
+
 D:/eclipse/eclipsec.exe -nosplash \
   -application org.eclipse.equinox.p2.director \
   -repository "https://download.eclipse.org/eclipse/updates/4.39/" \
-  -installIU "org.eclipse.debug.core.source,org.eclipse.jdt.core.source,org.eclipse.core.resources.source,org.eclipse.debug.ui.source,org.eclipse.jdt.launching.source,org.eclipse.jdt.ui.source,org.eclipse.ui.console.source" \
+  -installIU "$BUNDLES" \
   -destination "D:/eclipse" \
   -profile "epp.package.jee"
 ```
 
 Adjust the update site URL to match your Eclipse version (e.g. `4.39`)
-and `-destination` to your Eclipse path.
+and paths to your Eclipse installation.
 
 ## Environment check (REQUIRED)
 
