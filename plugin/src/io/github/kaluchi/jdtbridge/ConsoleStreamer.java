@@ -87,6 +87,7 @@ class ConsoleStreamer {
     }
 
     /** Thrown by listener when output stream is closed. */
+    @SuppressWarnings("serial")
     static class StreamClosedException extends RuntimeException {
         StreamClosedException(IOException cause) { super(cause); }
     }

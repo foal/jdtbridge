@@ -159,7 +159,7 @@ class SearchHandler {
                     }
                 }
                 if (!sourceOnly) {
-                    for (var cf : pkg.getClassFiles()) {
+                    for (var cf : pkg.getOrdinaryClassFiles()) {
                         IType type = cf.getType();
                         arr.add(Json.object()
                                 .put("fqn",
@@ -445,7 +445,6 @@ class SearchHandler {
                     null);
         }
 
-        String file = filePath(type);
         String absPath = absolutePath(type);
         String fullSource = getFullSource(type);
 
@@ -598,21 +597,6 @@ class SearchHandler {
         }
         return type.getFullyQualifiedName().replace('.', '/')
                 + ".java";
-    }
-
-    private HttpServer.Response singleMemberResponse(
-            IMember member, String file, String fullSource)
-            throws Exception {
-        String source = member.getSource();
-        if (source == null) {
-            return HttpServer.Response.json(
-                    Json.error("Source not available"));
-        }
-        int[] lines = memberLines(member, fullSource);
-        return HttpServer.Response.text(source, Map.of(
-                "X-File", file,
-                "X-Start-Line", String.valueOf(lines[0]),
-                "X-End-Line", String.valueOf(lines[1])));
     }
 
     private int[] memberLines(IMember member, String fullSource)
