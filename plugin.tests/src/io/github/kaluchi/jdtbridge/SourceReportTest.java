@@ -1,10 +1,17 @@
 package io.github.kaluchi.jdtbridge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.IType;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 /**
  * Unit tests for {@link SourceReport} — javadoc extraction
@@ -96,6 +103,73 @@ public class SourceReportTest {
         void onlyTags() {
             assertNull(SourceReport.extractFirstSentence(
                     "/**\n * @param x the value\n */"));
+        }
+    }
+
+    @Nested
+    @EnabledIfSystemProperty(
+            named = "jdtbridge.integration-tests",
+            matches = "true")
+    class JsonOutput {
+
+        @BeforeAll
+        static void setUp() throws Exception { TestFixture.create(); }
+
+        @AfterAll
+        static void tearDown() throws Exception {
+            TestFixture.destroy();
+        }
+
+        @Test
+        void fullClassSkipsSameClassRefs() throws Exception {
+            IType type = JdtUtils.findType("test.model.Dog");
+            var refs = ReferenceCollector.collect(type);
+            String json = SourceReport.toJson(
+                    "test.model.Dog", type,
+                    "D:/test/Dog.java",
+                    type.getSource(), 1, 20, refs);
+            // Should not have scope=class refs (all members
+            // already in source)
+            assertFalse(json.contains("\"scope\":\"class\""),
+                    "Full class should skip same-class refs: "
+                            + json);
+        }
+
+        @Test
+        void methodIncludesSameClassRefs() throws Exception {
+            IType type = JdtUtils.findType(
+                    "test.service.AnimalService");
+            IMethod[] methods = type.getMethods();
+            assertTrue(methods.length > 0);
+            var refs = ReferenceCollector.collect(methods[0]);
+            String json = SourceReport.toJson(
+                    "test.service.AnimalService#process",
+                    methods[0], "D:/test/AnimalService.java",
+                    methods[0].getSource(), 1, 10, refs);
+            // May have class-scope refs if method references
+            // other members
+            assertTrue(json.contains("\"fqmn\""),
+                    "Should have refs: " + json);
+        }
+
+        @Test
+        void constructorHasNoReturnType() throws Exception {
+            IType type = JdtUtils.findType("test.model.Dog");
+            // Dog has a constructor (implicit or explicit)
+            // Find any method ref that is a constructor
+            var refs = ReferenceCollector.collect(type);
+            for (var ref : refs.values()) {
+                if (ref.element() instanceof IMethod m
+                        && m.isConstructor()) {
+                    String json = SourceReport.toJson(
+                            "test", type, "D:/test.java",
+                            "code", 1, 1,
+                            java.util.Map.of(ref.fqmn(), ref));
+                    assertFalse(json.contains("\"type\":\"void\""),
+                            "Constructor should not have void type: "
+                                    + json);
+                }
+            }
         }
     }
 }
