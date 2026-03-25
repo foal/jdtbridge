@@ -8,6 +8,24 @@ Required tools (verified by `jdt setup --check`):
 - **Eclipse IDE** — running, with JDT Bridge plugin installed
 - **git**, **gh** (GitHub CLI) — version control, PRs, releases
 
+### Eclipse source bundles (recommended)
+
+`jdt source` needs source bundles to read Eclipse Platform/JDT API source
+and javadoc. Without them, `jdt source org.eclipse.debug.core.model.IStreamMonitor`
+returns "Source not available". Install once (Eclipse must be closed):
+
+```bash
+D:/eclipse/eclipsec.exe -nosplash \
+  -application org.eclipse.equinox.p2.director \
+  -repository "https://download.eclipse.org/eclipse/updates/4.39/" \
+  -installIU "org.eclipse.debug.core.source,org.eclipse.jdt.core.source,org.eclipse.core.resources.source,org.eclipse.debug.ui.source,org.eclipse.jdt.launching.source,org.eclipse.jdt.ui.source,org.eclipse.ui.console.source" \
+  -destination "D:/eclipse" \
+  -profile "epp.package.jee"
+```
+
+Adjust the update site URL to match your Eclipse version (e.g. `4.39`)
+and `-destination` to your Eclipse path.
+
 ## Environment check (REQUIRED)
 
 **Run at the start of every conversation, before any other work.**
