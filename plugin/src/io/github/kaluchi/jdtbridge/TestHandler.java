@@ -1,6 +1,7 @@
 package io.github.kaluchi.jdtbridge;
 
 import java.util.ArrayList;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 import java.util.jar.Manifest;
@@ -101,6 +102,7 @@ class TestHandler {
         if (configError != null) {
             return configError;
         }
+        org.eclipse.debug.core.ILaunchConfiguration config = wc.doSave();
 
         // Register listener before launch
         CountDownLatch latch = new CountDownLatch(1);
@@ -109,13 +111,13 @@ class TestHandler {
         JUnitCore.addTestRunListener(collector);
 
         ILaunch launch =
-                new Launch(wc, ILaunchManager.RUN_MODE, null);
+                new Launch(config, ILaunchManager.RUN_MODE, null);
         manager.addLaunch(launch);
 
         try {
             JUnitLaunchConfigurationDelegate delegate =
                     new JUnitLaunchConfigurationDelegate();
-            delegate.launch(wc, ILaunchManager.RUN_MODE,
+            delegate.launch(config, ILaunchManager.RUN_MODE,
                     launch, new NullProgressMonitor());
 
             if (!latch.await(timeoutSec, TimeUnit.SECONDS)) {
@@ -132,6 +134,12 @@ class TestHandler {
                 } catch (Exception e) {
                     Log.warn("Failed to terminate launch", e);
                 }
+            }
+            manager.removeLaunch(launch);
+            try {
+                config.delete();
+            } catch (Exception e) {
+                Log.warn("Failed to delete launch config", e);
             }
         }
     }
@@ -165,7 +173,7 @@ class TestHandler {
                 wc.setAttribute(ATTR_TEST_NAME, methodName);
             }
         } else if (projectName != null && !projectName.isBlank()) {
-            var model = JavaCore.create(
+            org.eclipse.jdt.core.IJavaModel model = JavaCore.create(
                     ResourcesPlugin.getWorkspace().getRoot());
             IJavaProject jp = model.getJavaProject(projectName);
             if (jp == null || !jp.exists()) {
@@ -206,7 +214,7 @@ class TestHandler {
             IType t = JdtUtils.findType(fqn);
             if (t != null) refreshProject = t.getJavaProject();
         } else if (projectName != null && !projectName.isBlank()) {
-            var model = JavaCore.create(
+            org.eclipse.jdt.core.IJavaModel model = JavaCore.create(
                     ResourcesPlugin.getWorkspace().getRoot());
             refreshProject = model.getJavaProject(projectName);
         }
@@ -261,7 +269,7 @@ class TestHandler {
         }
 
         private void recordTestCase(ITestCaseElement tc) {
-            var result = tc.getTestResult(false);
+            ITestElement.Result result = tc.getTestResult(false);
             total++;
             TestResult tr = new TestResult();
             tr.className = tc.getTestClassName();
@@ -331,6 +339,12 @@ class TestHandler {
 
     String detectTestKind(IJavaProject project) {
         try {
+            if (hasJUnitPlatformTests(project, 6)) {
+                return JUNIT6_KIND;
+            }
+            if (hasJUnitPlatformTests(project, 5)) {
+                return JUNIT5_KIND;
+            }
             if (hasJUnitJupiterMajor(project, 6,
                     JUnitCore.JUNIT3_CONTAINER_PATH,
                     JUnitCore.JUNIT4_CONTAINER_PATH,
@@ -343,16 +357,35 @@ class TestHandler {
                     JUnitCore.JUNIT6_CONTAINER_PATH)) {
                 return JUNIT5_KIND;
             }
-            // Fallback: Jupiter API on classpath but platform
-            // marker not resolvable (common with M2Eclipse)
-            if (project.findType(
-                    "org.junit.jupiter.api.Test") != null) {
-                return JUNIT5_KIND;
-            }
         } catch (JavaModelException e) {
             Log.warn("detectTestKind failed", e);
         }
         return JUNIT4_KIND;
+    }
+
+    private boolean hasJUnitPlatformTests(IJavaProject project,
+            int major) {
+        if (project == null) return false;
+
+        String methodName = switch (major) {
+            case 6 -> "hasJUnit6TestAnnotation";
+            case 5 -> "hasJUnit5TestAnnotation";
+            default -> null;
+        };
+        if (methodName == null) return false;
+
+        try {
+            Class<?> searchEngine = Class.forName(
+                    "org.eclipse.jdt.internal.junit.util."
+                            + "CoreTestSearchEngine");
+            Method method = searchEngine.getMethod(methodName,
+                    IJavaProject.class);
+            Object result = method.invoke(null, project);
+            return Boolean.TRUE.equals(result);
+        } catch (ReflectiveOperationException e) {
+            Log.warn("JUnit platform detection failed", e);
+            return false;
+        }
     }
 
     private boolean hasJUnitJupiterMajor(IJavaProject project,
@@ -401,10 +434,19 @@ class TestHandler {
         if (version == null) return null;
 
         try {
-            return Version.parseVersion(version).getMajor();
+            return normalizeJUnitMajor(
+                    Version.parseVersion(version).getMajor());
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    private int normalizeJUnitMajor(int major) {
+        // JUnit 5 artifacts use junit-platform-* version 1.x.
+        if (major == 1) {
+            return 5;
+        }
+        return major;
     }
 
     private String readManifestVersion(IType marker) {
@@ -465,7 +507,7 @@ class TestHandler {
 
     private IPackageFragment findPackage(IJavaProject project,
             String packageName) throws JavaModelException {
-        for (var root : project.getPackageFragmentRoots()) {
+        for (IPackageFragmentRoot root : project.getPackageFragmentRoots()) {
             if (root.getKind()
                     == org.eclipse.jdt.core.IPackageFragmentRoot
                             .K_SOURCE) {

@@ -22,10 +22,10 @@ public class TestHandlerTest {
     private static final TestHandler handler = new TestHandler();
 
     @Test
-    public void detectTestKindJunit5FromPlatformCommons() {
+    public void detectTestKindJunit5FromPlatformCommons1x() {
         IJavaProject project = fakeProjectWithMarker(
                 "org.junit.platform.commons.annotation.Testable",
-                "junit-platform-commons-5.12.1.jar");
+                "junit-platform-commons_1.14.3.jar");
 
         String kind = handler.detectTestKind(project);
 
@@ -55,23 +55,23 @@ public class TestHandlerTest {
     }
 
     @Test
-    public void detectTestKindJunit5FallbackFromJupiterApi() {
-        // Platform markers not resolvable, but Jupiter API is
-        IJavaProject project = fakeProjectWithFallbackOnly(
-                "org.junit.jupiter.api.Test");
-
-        String kind = handler.detectTestKind(project);
-
-        assertEquals("org.eclipse.jdt.junit.loader.junit5", kind);
-    }
-
-    @Test
     public void detectTestKindFallsBackToJunit4WhenNothingFound() {
         IJavaProject project = fakeProjectWithFallbackOnly(null);
 
         String kind = handler.detectTestKind(project);
 
         assertEquals("org.eclipse.jdt.junit.loader.junit4", kind);
+    }
+
+    @Test
+    public void detectTestKindJunit5FromSuiteApi1x() {
+        IJavaProject project = fakeProjectWithMarker(
+                "org.junit.platform.suite.api.Suite",
+                "junit-platform-suite-api_1.14.3.jar");
+
+        String kind = handler.detectTestKind(project);
+
+        assertEquals("org.eclipse.jdt.junit.loader.junit5", kind);
     }
 
     @Test
@@ -93,7 +93,7 @@ public class TestHandlerTest {
 
     private int invokeParseTimeout(String s, int defaultVal) {
         try {
-            var method = TestHandler.class
+            java.lang.reflect.Method method = TestHandler.class
                     .getDeclaredMethod("parseTimeout",
                             String.class, int.class);
             method.setAccessible(true);
