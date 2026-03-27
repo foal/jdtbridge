@@ -1,5 +1,7 @@
 package io.github.kaluchi.jdtbridge;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
@@ -39,12 +41,12 @@ class RefactoringHandler {
             throws Exception {
         String filePath = params.get("file");
         if (filePath == null || filePath.isBlank()) {
-            return Json.error("Missing 'file' parameter");
+            return HttpServer.jsonError("Missing 'file' parameter");
         }
 
         ICompilationUnit cu = findCompilationUnit(filePath);
         if (cu == null) {
-            return Json.error("Java file not found: " + filePath);
+            return HttpServer.jsonError("Java file not found: " + filePath);
         }
 
         cu.getResource().refreshLocal(IResource.DEPTH_ZERO, null);
@@ -73,9 +75,10 @@ class RefactoringHandler {
                 cu.commitWorkingCopy(true, null);
             }
 
-            return Json.object()
-                    .put("added", added)
-                    .put("removed", removed).toString();
+            var r = new JsonObject();
+            r.addProperty("added", added);
+            r.addProperty("removed", removed);
+            return r.toString();
         } finally {
             cu.discardWorkingCopy();
         }
@@ -84,12 +87,12 @@ class RefactoringHandler {
     String handleFormat(Map<String, String> params) throws Exception {
         String filePath = params.get("file");
         if (filePath == null || filePath.isBlank()) {
-            return Json.error("Missing 'file' parameter");
+            return HttpServer.jsonError("Missing 'file' parameter");
         }
 
         ICompilationUnit cu = findCompilationUnit(filePath);
         if (cu == null) {
-            return Json.error("Java file not found: " + filePath);
+            return HttpServer.jsonError("Java file not found: " + filePath);
         }
 
         cu.getResource().refreshLocal(IResource.DEPTH_ZERO, null);
@@ -107,10 +110,12 @@ class RefactoringHandler {
                 0, lineSep);
 
         if (edit == null) {
-            return Json.object()
-                    .put("modified", false)
-                    .put("reason", "formatter returned no edits"
-                            + " (syntax error?)").toString();
+            var r = new JsonObject();
+            r.addProperty("modified", false);
+            r.addProperty("reason",
+                    "formatter returned no edits"
+                    + " (syntax error?)");
+            return r.toString();
         }
 
         Document document = new Document(source);
@@ -118,8 +123,9 @@ class RefactoringHandler {
         String formatted = document.get();
 
         if (formatted.equals(source)) {
-            return Json.object()
-                    .put("modified", false).toString();
+            var r = new JsonObject();
+            r.addProperty("modified", false);
+            return r.toString();
         }
 
         cu.becomeWorkingCopy(null);
@@ -130,7 +136,9 @@ class RefactoringHandler {
             cu.discardWorkingCopy();
         }
 
-        return Json.object().put("modified", true).toString();
+        var r = new JsonObject();
+        r.addProperty("modified", true);
+        return r.toString();
     }
 
     String handleRename(Map<String, String> params) throws Exception {
@@ -138,15 +146,15 @@ class RefactoringHandler {
         String newName = params.get("newName");
 
         if (fqn == null || fqn.isBlank()) {
-            return Json.error("Missing 'class' parameter");
+            return HttpServer.jsonError("Missing 'class' parameter");
         }
         if (newName == null || newName.isBlank()) {
-            return Json.error("Missing 'newName' parameter");
+            return HttpServer.jsonError("Missing 'newName' parameter");
         }
 
         IType type = JdtUtils.findType(fqn);
         if (type == null) {
-            return Json.error("Type not found: " + fqn);
+            return HttpServer.jsonError("Type not found: " + fqn);
         }
 
         String methodName = params.get("method");
@@ -158,7 +166,7 @@ class RefactoringHandler {
         if (fieldName != null && !fieldName.isBlank()) {
             IField field = type.getField(fieldName);
             if (field == null || !field.exists()) {
-                return Json.error("Field not found: " + fieldName
+                return HttpServer.jsonError("Field not found: " + fieldName
                         + " in " + fqn);
             }
             element = field;
@@ -167,7 +175,7 @@ class RefactoringHandler {
             IMethod method = JdtUtils.findMethod(type, methodName,
                     params.get("paramTypes"));
             if (method == null) {
-                return Json.error("Method not found: " + methodName
+                return HttpServer.jsonError("Method not found: " + methodName
                         + " in " + fqn);
             }
             element = method;
@@ -191,20 +199,20 @@ class RefactoringHandler {
         String targetPkg = params.get("target");
 
         if (fqn == null || fqn.isBlank()) {
-            return Json.error("Missing 'class' parameter");
+            return HttpServer.jsonError("Missing 'class' parameter");
         }
         if (targetPkg == null || targetPkg.isBlank()) {
-            return Json.error("Missing 'target' parameter");
+            return HttpServer.jsonError("Missing 'target' parameter");
         }
 
         IType type = JdtUtils.findType(fqn);
         if (type == null) {
-            return Json.error("Type not found: " + fqn);
+            return HttpServer.jsonError("Type not found: " + fqn);
         }
 
         ICompilationUnit cu = type.getCompilationUnit();
         if (cu == null) {
-            return Json.error("Cannot move binary type");
+            return HttpServer.jsonError("Cannot move binary type");
         }
 
         IPackageFragmentRoot sourceRoot = (IPackageFragmentRoot)
@@ -265,21 +273,21 @@ class RefactoringHandler {
         Refactoring refactoring =
                 descriptor.createRefactoring(status);
         if (status.hasFatalError()) {
-            return Json.error(status.getMessageMatchingSeverity(
+            return HttpServer.jsonError(status.getMessageMatchingSeverity(
                     RefactoringStatus.FATAL));
         }
 
         status.merge(refactoring.checkInitialConditions(
                 new NullProgressMonitor()));
         if (status.hasFatalError()) {
-            return Json.error(status.getMessageMatchingSeverity(
+            return HttpServer.jsonError(status.getMessageMatchingSeverity(
                     RefactoringStatus.FATAL));
         }
 
         status.merge(refactoring.checkFinalConditions(
                 new NullProgressMonitor()));
         if (status.hasFatalError()) {
-            return Json.error(status.getMessageMatchingSeverity(
+            return HttpServer.jsonError(status.getMessageMatchingSeverity(
                     RefactoringStatus.FATAL));
         }
 
@@ -291,15 +299,16 @@ class RefactoringHandler {
             change.dispose();
         }
 
-        Json result = Json.object().put("ok", true);
+        var result = new JsonObject();
+        result.addProperty("ok", true);
         if (status.hasWarning()) {
-            Json warnings = Json.array();
+            var warnings = new JsonArray();
             for (var entry : status.getEntries()) {
                 if (entry.isWarning()) {
                     warnings.add(entry.getMessage());
                 }
             }
-            result.put("warnings", warnings);
+            result.add("warnings", warnings);
         }
         return result.toString();
     }

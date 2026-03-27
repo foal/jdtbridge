@@ -2,8 +2,11 @@ package io.github.kaluchi.jdtbridge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.google.gson.JsonParser;
 
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.IType;
@@ -128,49 +131,53 @@ public class SourceReportTest {
                     "test.model.Dog", type,
                     "D:/test/Dog.java",
                     type.getSource(), 1, 20, refs, null);
-            // Type-level: hierarchy, no outgoing refs
-            assertTrue(json.contains("\"supertypes\""),
-                    "Should have supertypes: " + json);
-            assertFalse(json.contains("\"refs\""),
-                    "Should not have refs: " + json);
+            var parsed = JsonParser.parseString(json)
+                    .getAsJsonObject();
+            assertEquals("test.model.Dog",
+                    parsed.get("fqmn").getAsString());
+            assertTrue(parsed.has("supertypes"));
+            assertFalse(parsed.has("refs"));
         }
 
         @Test
-        void methodIncludesSameClassRefs() throws Exception {
+        void methodHasRefsWithDirection() throws Exception {
             IType type = JdtUtils.findType(
                     "test.service.AnimalService");
-            IMethod[] methods = type.getMethods();
-            assertTrue(methods.length > 0);
-            var refs = ReferenceCollector.collect(methods[0]);
+            IMethod method = JdtUtils.findMethod(
+                    type, "process", null);
+            assertNotNull(method);
+            var refs = ReferenceCollector.collect(method);
             String json = SourceReport.toJson(
-                    "test.service.AnimalService#process",
-                    methods[0], "D:/test/AnimalService.java",
-                    methods[0].getSource(), 1, 10, refs, null);
-            // May have class-scope refs if method references
-            // other members
-            assertTrue(json.contains("\"fqmn\""),
-                    "Should have refs: " + json);
+                    "test.service.AnimalService#process(Animal)",
+                    method, "D:/test/AnimalService.java",
+                    method.getSource(), 1, 10, refs, null);
+            var parsed = JsonParser.parseString(json)
+                    .getAsJsonObject();
+            assertEquals(
+                    "test.service.AnimalService#process(Animal)",
+                    parsed.get("fqmn").getAsString());
+            assertTrue(parsed.has("refs"));
+            assertTrue(json.contains(
+                    "\"direction\":\"outgoing\""),
+                    "Refs should have outgoing direction: "
+                    + json);
         }
 
         @Test
-        void constructorHasNoReturnType() throws Exception {
-            IType type = JdtUtils.findType("test.model.Dog");
-            // Dog has a constructor (implicit or explicit)
-            // Find any method ref that is a constructor
-            var refs = ReferenceCollector.collect(type);
-            for (var ref : refs.values()) {
-                if (ref.element() instanceof IMethod m
-                        && m.isConstructor()) {
-                    String json = SourceReport.toJson(
-                            "test", type, "D:/test.java",
-                            "code", 1, 1,
-                            java.util.Map.of(ref.fqmn(), ref),
-                            null);
-                    assertFalse(json.contains("\"type\":\"void\""),
-                            "Constructor should not have void type: "
-                                    + json);
-                }
-            }
+        void methodRefHasTypeKindField() throws Exception {
+            IType type = JdtUtils.findType(
+                    "test.service.AnimalService");
+            IMethod method = JdtUtils.findMethod(
+                    type, "process", null);
+            var refs = ReferenceCollector.collect(method);
+            String json = SourceReport.toJson(
+                    "test.service.AnimalService#process(Animal)",
+                    method, "D:/test/AnimalService.java",
+                    method.getSource(), 1, 10, refs, null);
+            // Animal#name() should have typeKind:interface
+            assertTrue(json.contains(
+                    "\"typeKind\":\"interface\""),
+                    "Should have interface typeKind: " + json);
         }
     }
 }

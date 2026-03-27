@@ -233,8 +233,10 @@ class TestFixture {
             import test.edge.AbstractPet;
             import test.edge.Parrot;
             import test.edge.Color;
+            import test.edge.Marker;
             import test.edge.Outer;
 
+            @Marker("enriched")
             public class EnrichedRefService {
                 private static final Dog SHARED_DOG = new Dog();
 
@@ -278,6 +280,27 @@ class TestFixture {
 
                 public String name() {
                     return item.name();
+                }
+            }
+            """;
+
+    private static final String CALLER_SRC = """
+            package test.service;
+
+            import test.model.Animal;
+            import test.model.Dog;
+
+            public class CallerService {
+                private final AnimalService service =
+                        new AnimalService();
+
+                public void callProcess() {
+                    Animal dog = new Dog();
+                    service.process(dog);
+                }
+
+                public Dog callCreateDog() {
+                    return service.createDog();
                 }
             }
             """;
@@ -402,6 +425,9 @@ class TestFixture {
         servicePkg.createCompilationUnit(
                 "GenericService.java",
                 GENERIC_SERVICE_SRC, true, null);
+        servicePkg.createCompilationUnit(
+                "CallerService.java",
+                CALLER_SRC, true, null);
 
         IPackageFragment brokenPkg =
                 srcRoot.createPackageFragment("test.broken", true, null);
