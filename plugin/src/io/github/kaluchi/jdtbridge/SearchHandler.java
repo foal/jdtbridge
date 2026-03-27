@@ -1,5 +1,6 @@
 package io.github.kaluchi.jdtbridge;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -464,8 +465,9 @@ class SearchHandler {
                         absPath, fullSource, params);
             }
 
-            // Multiple overloads — JSON array
-            Json arr = Json.array();
+            // Multiple overloads — JSON array, each fully enriched
+            StringBuilder arrJson = new StringBuilder("[");
+            boolean first = true;
             for (IMethod method : methods) {
                 int[] lines = memberLines(method, fullSource);
                 String src = sourceFromDisk(absPath,
@@ -476,24 +478,16 @@ class SearchHandler {
                 String sig = JdtUtils.compactSignature(method);
                 String mFqmn = fqn + "#" + sig;
                 var refs = ReferenceCollector.collect(method);
-                // Inline JSON building for each overload
-                Json entry = Json.object()
-                        .put("fqmn", mFqmn)
-                        .put("file", absPath)
-                        .put("startLine", lines[0])
-                        .put("endLine", lines[1])
-                        .put("source", src);
-                Json refsArr = Json.array();
-                for (var ref : refs.values()) {
-                    refsArr.add(Json.object()
-                            .put("fqmn", ref.fqmn())
-                            .put("kind", ref.kind().name()
-                                    .toLowerCase()));
-                }
-                entry.put("refs", refsArr);
-                arr.add(entry);
+                var incoming = collectIncomingRefs(method);
+                String json = SourceReport.toJson(
+                        mFqmn, method, absPath, src,
+                        lines[0], lines[1], refs, incoming);
+                if (!first) arrJson.append(",");
+                arrJson.append(json);
+                first = false;
             }
-            return HttpServer.Response.json(arr.toString());
+            arrJson.append("]");
+            return HttpServer.Response.json(arrJson.toString());
         }
 
         // Full class source
@@ -527,11 +521,84 @@ class SearchHandler {
                 : fqn;
 
         var refs = ReferenceCollector.collect(member);
+        var incoming = collectIncomingRefs(member);
         String json = SourceReport.toJson(
                 fqmn, member, absPath, source,
-                lines[0], lines[1], refs);
+                lines[0], lines[1], refs, incoming);
 
         return HttpServer.Response.json(json);
+    }
+
+    /**
+     * Collect incoming references (callers) for a member using
+     * SearchEngine. Returns enriched refs for the JSON output.
+     */
+    private List<SourceReport.IncomingRef> collectIncomingRefs(
+            IMember member) {
+        var result = new ArrayList<SourceReport.IncomingRef>();
+        var seen = new java.util.HashSet<String>();
+        try {
+            SearchEngine engine = new SearchEngine();
+            SearchPattern pattern = SearchPattern.createPattern(
+                    member, IJavaSearchConstants.REFERENCES);
+            if (pattern == null) return result;
+
+            engine.search(pattern,
+                    new SearchParticipant[]{
+                            SearchEngine
+                                    .getDefaultSearchParticipant()},
+                    SearchEngine.createWorkspaceScope(),
+                    new SearchRequestor() {
+                        @Override
+                        public void acceptSearchMatch(
+                                SearchMatch match) {
+                            if (match.getAccuracy()
+                                    != SearchMatch.A_ACCURATE)
+                                return;
+                            if (match.isInsideDocComment())
+                                return;
+
+                            String enclosing =
+                                    getEnclosingName(match);
+                            if (enclosing == null) return;
+
+                            String file = getMatchFile(match);
+                            int line = getLine(match);
+
+                            boolean isProject = false;
+                            String typeKind = null;
+                            try {
+                                if (match.getElement()
+                                        instanceof IMember m) {
+                                    IType dt =
+                                            m.getDeclaringType();
+                                    if (dt == null
+                                            && m instanceof IType t)
+                                        dt = t;
+                                    if (dt != null) {
+                                        isProject =
+                                                !dt.isBinary();
+                                        typeKind =
+                                                JdtUtils.typeKind(
+                                                        dt);
+                                    }
+                                }
+                            } catch (Exception e) { /* skip */ }
+
+                            if (seen.add(enclosing)) {
+                                result.add(
+                                        new SourceReport.IncomingRef(
+                                                enclosing, file,
+                                                line, typeKind,
+                                                isProject));
+                            }
+                        }
+                    },
+                    null);
+        } catch (Exception e) {
+            Log.warn("collectIncomingRefs failed", e);
+        }
+        return result;
     }
 
     private String absolutePath(IType type) {
@@ -693,14 +760,14 @@ class SearchHandler {
                         : member.getElementName());
         if (member instanceof IMethod m) {
             try {
-                return typeFqn + "."
+                return typeFqn + "#"
                         + JdtUtils.compactSignature(m);
             } catch (JavaModelException e) {
-                return typeFqn + "." + m.getElementName() + "()";
+                return typeFqn + "#" + m.getElementName() + "()";
             }
         }
         if (member instanceof IField f) {
-            return typeFqn + "." + f.getElementName();
+            return typeFqn + "#" + f.getElementName();
         }
         if (member instanceof IType t) {
             return t.getFullyQualifiedName();

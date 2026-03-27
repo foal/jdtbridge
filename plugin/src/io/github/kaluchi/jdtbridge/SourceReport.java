@@ -1,13 +1,12 @@
 package io.github.kaluchi.jdtbridge;
 
-import org.eclipse.jdt.core.IField;
 import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IMember;
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.ISourceRange;
 import org.eclipse.jdt.core.IType;
+import org.eclipse.jdt.core.ITypeHierarchy;
 import org.eclipse.jdt.core.JavaModelException;
-import org.eclipse.jdt.core.Signature;
 
 import java.util.Map;
 
@@ -17,10 +16,15 @@ import java.util.Map;
  */
 class SourceReport {
 
+    /** An incoming reference (caller). */
+    record IncomingRef(String fqmn, String file, int line,
+            String typeKind, boolean isProjectSource) {}
+
     static String toJson(String fqmn, IMember member,
             String absPath, String source,
             int startLine, int endLine,
-            Map<String, ReferenceCollector.Ref> refs) {
+            Map<String, ReferenceCollector.Ref> refs,
+            java.util.List<IncomingRef> incomingRefs) {
 
         IType declaringType = member instanceof IType t
                 ? t : member.getDeclaringType();
@@ -34,33 +38,92 @@ class SourceReport {
                 .put("endLine", endLine)
                 .put("source", source);
 
+        // Resolve @Override target (method-level only)
+        Json overrideTarget = resolveOverrideTarget(member);
+        if (overrideTarget != null) {
+            result.put("overrideTarget", overrideTarget);
+        }
+
+        // Type-level: hierarchy instead of outgoing calls
+        if (member instanceof IType viewedType) {
+            addHierarchy(result, viewedType);
+            return result.toString();
+        }
+
+        // Method-level: resolve implementations, emit refs
+        ReferenceCollector.resolveImplementations(refs);
+
         Json refsArr = Json.array();
         for (var ref : refs.values()) {
             Json entry = Json.object()
                     .put("fqmn", ref.fqmn())
-                    .put("kind", ref.kind().name().toLowerCase());
+                    .put("direction", "outgoing")
+                    .put("kind",
+                            ref.kind().name().toLowerCase());
+
+            // Type kind of declaring type
+            if (ref.declaringTypeKind() != null) {
+                entry.put("typeKind",
+                        ref.declaringTypeKind());
+            }
 
             String refTypeFqn = extractTypeFqn(ref.fqmn());
 
             // Classify: same-class, project, dependency
-            // Skip same-class refs when viewing full class
-            // (already visible in source)
             if (refTypeFqn.equals(ownFqn)) {
-                if (member instanceof IType) continue;
                 entry.put("scope", "class");
             } else if (isProjectSource(ref.element())) {
                 entry.put("scope", "project");
-                String path = absolutePath(ref.element());
-                if (path != null) entry.put("file", path);
             } else {
                 entry.put("scope", "dependency");
             }
 
-            // Type info
-            String type = resolveType(ref);
-            if (type != null) entry.put("type", type);
+            // File path for all scopes (null for binary deps)
+            String path = absolutePath(ref.element());
+            if (path != null) entry.put("file", path);
 
-            // Line range (for same-class members)
+            // Return/field type (call-site resolved from binding)
+            if (ref.resolvedType() != null) {
+                entry.put("type", ref.resolvedType());
+            }
+            if (ref.resolvedTypeFqn() != null) {
+                entry.put("returnTypeFqn",
+                        ref.resolvedTypeFqn());
+            }
+            if (ref.resolvedTypeKind() != null) {
+                entry.put("returnTypeKind",
+                        ref.resolvedTypeKind());
+            }
+
+            // Type variable + bound
+            if (ref.isTypeVariable()) {
+                entry.put("isTypeVariable", true);
+            }
+            if (ref.typeBound() != null) {
+                entry.put("typeBound", ref.typeBound());
+            }
+
+            // Static modifier
+            if (ref.isStatic()) {
+                entry.put("static", true);
+            }
+
+            // Inherited
+            if (ref.isInherited()) {
+                entry.put("inherited", true);
+                if (ref.inheritedFrom() != null) {
+                    entry.put("inheritedFrom",
+                            ref.inheritedFrom());
+                }
+            }
+
+            // Implementation of interface method
+            if (ref.implementationOf() != null) {
+                entry.put("implementationOf",
+                        ref.implementationOf());
+            }
+
+            // Line range
             int[] lines = memberLines(ref.element());
             if (lines != null) {
                 entry.put("line", lines[0]);
@@ -69,53 +132,41 @@ class SourceReport {
                 }
             }
 
-            // Javadoc summary for class + project scope
-            String refScope = refTypeFqn.equals(ownFqn)
-                    ? "class"
-                    : (isProjectSource(ref.element())
-                            ? "project" : "dependency");
-            if (!"dependency".equals(refScope)) {
-                String doc = javadocSummary(ref.element());
-                if (doc != null) entry.put("doc", doc);
-            }
+            // Javadoc summary for ALL scopes
+            String doc = javadocSummary(ref.element());
+            if (doc != null) entry.put("doc", doc);
 
             refsArr.add(entry);
         }
+
+        // Incoming refs (callers)
+        if (incomingRefs != null) {
+            for (var inc : incomingRefs) {
+                Json entry = Json.object()
+                        .put("fqmn", inc.fqmn())
+                        .put("direction", "incoming")
+                        .put("kind", "method");
+                if (inc.typeKind() != null) {
+                    entry.put("typeKind", inc.typeKind());
+                }
+                entry.put("scope", inc.isProjectSource()
+                        ? "project" : "dependency");
+                if (inc.file() != null) {
+                    entry.put("file", inc.file());
+                }
+                if (inc.line() > 0) {
+                    entry.put("line", inc.line());
+                }
+                refsArr.add(entry);
+            }
+        }
+
         result.put("refs", refsArr);
 
         return result.toString();
     }
 
     // ---- Helpers ----
-
-    private static String resolveType(ReferenceCollector.Ref ref) {
-        try {
-            if (ref.element() instanceof IMethod m) {
-                if (m.isConstructor()) return null;
-                return resolveTypeSig(
-                        m.getReturnType(), m.getDeclaringType());
-            }
-            if (ref.element() instanceof IField f) {
-                return resolveTypeSig(
-                        f.getTypeSignature(), f.getDeclaringType());
-            }
-        } catch (JavaModelException e) { /* ignore */ }
-        return null;
-    }
-
-    private static String resolveTypeSig(String sig, IType context)
-            throws JavaModelException {
-        String simple = Signature.toString(sig);
-        if (context == null) return simple;
-        // Try to resolve simple name to FQN
-        String[][] resolved = context.resolveType(simple);
-        if (resolved != null && resolved.length > 0) {
-            String pkg = resolved[0][0];
-            String name = resolved[0][1];
-            return pkg.isEmpty() ? name : pkg + "." + name;
-        }
-        return simple;
-    }
 
     private static int[] memberLines(IJavaElement element) {
         try {
@@ -129,7 +180,8 @@ class SourceReport {
                                 ? m.getClassFile().getSource()
                                 : null);
                 if (source == null) return null;
-                int start = offsetToLine(source, range.getOffset());
+                int start = offsetToLine(source,
+                        range.getOffset());
                 int end = offsetToLine(source,
                         range.getOffset() + range.getLength());
                 return new int[]{start, end};
@@ -218,9 +270,141 @@ class SourceReport {
         return false;
     }
 
+    /**
+     * Add hierarchy info for type-level source: supertypes,
+     * subtypes/implementors, enclosing type.
+     */
+    private static void addHierarchy(Json result, IType type) {
+        try {
+            ITypeHierarchy hierarchy =
+                    type.newTypeHierarchy(null);
+
+            // Supertypes
+            Json supers = Json.array();
+            IType superclass = hierarchy.getSuperclass(type);
+            if (superclass != null) {
+                String fqn = superclass.getFullyQualifiedName();
+                if (!"java.lang.Object".equals(fqn)) {
+                    supers.add(Json.object()
+                            .put("fqn", fqn)
+                            .put("kind", typeKindStr(superclass)));
+                }
+            }
+            for (IType iface
+                    : hierarchy.getSuperInterfaces(type)) {
+                supers.add(Json.object()
+                        .put("fqn",
+                                iface.getFullyQualifiedName())
+                        .put("kind", "interface"));
+            }
+            result.put("supertypes", supers);
+
+            // Subtypes / implementors
+            Json subs = Json.array();
+            for (IType sub : hierarchy.getSubtypes(type)) {
+                if (sub.isAnonymous()) continue;
+                subs.add(Json.object()
+                        .put("fqn",
+                                sub.getFullyQualifiedName())
+                        .put("kind", typeKindStr(sub)));
+            }
+            result.put("subtypes", subs);
+
+            // Enclosing type (for inner/nested types)
+            IType enclosing = type.getDeclaringType();
+            if (enclosing != null) {
+                result.put("enclosingType", Json.object()
+                        .put("fqn",
+                                enclosing.getFullyQualifiedName())
+                        .put("kind", typeKindStr(enclosing)));
+            }
+        } catch (Exception e) { /* ignore */ }
+    }
+
+    private static String typeKindStr(IType type) {
+        try {
+            if (type.isInterface()) return "interface";
+            if (type.isEnum()) return "enum";
+            if (type.isAnnotation()) return "annotation";
+        } catch (Exception e) { /* ignore */ }
+        return "class";
+    }
+
     private static String extractTypeFqn(String fqmn) {
         int hash = fqmn.indexOf('#');
         return hash >= 0 ? fqmn.substring(0, hash) : fqmn;
+    }
+
+    /**
+     * Find the supertype or interface that declares the method
+     * this member overrides. Returns null if no override.
+     * Checks superclass chain first (deterministic), then
+     * interfaces.
+     */
+    private static Json resolveOverrideTarget(IMember member) {
+        if (!(member instanceof IMethod method)) return null;
+        try {
+            IType declaringType = method.getDeclaringType();
+            if (declaringType == null) return null;
+
+            String methodName = method.getElementName();
+            String sig = ReferenceCollector.paramSig(method);
+
+            ITypeHierarchy hierarchy =
+                    declaringType.newSupertypeHierarchy(null);
+
+            // Superclass chain first (deterministic order)
+            IType current = declaringType;
+            while (true) {
+                IType superClass =
+                        hierarchy.getSuperclass(current);
+                if (superClass == null) break;
+                IMethod found = findMatchingMethod(
+                        superClass, methodName, sig);
+                if (found != null) {
+                    return overrideJson(superClass, found,
+                            methodName);
+                }
+                current = superClass;
+            }
+
+            // Then interfaces
+            for (IType iface
+                    : hierarchy.getAllSuperInterfaces(
+                            declaringType)) {
+                IMethod found = findMatchingMethod(
+                        iface, methodName, sig);
+                if (found != null) {
+                    return overrideJson(iface, found,
+                            methodName);
+                }
+            }
+        } catch (Exception e) { /* ignore */ }
+        return null;
+    }
+
+    private static Json overrideJson(IType type, IMethod method,
+            String methodName) throws JavaModelException {
+        return Json.object()
+                .put("fqmn", type.getFullyQualifiedName()
+                        + "#" + methodName + "("
+                        + ReferenceCollector.paramSig(method)
+                        + ")")
+                .put("kind", "method")
+                .put("typeKind", typeKindStr(type));
+    }
+
+    private static IMethod findMatchingMethod(
+            IType type, String name, String paramSig)
+            throws JavaModelException {
+        for (IMethod m : type.getMethods()) {
+            if (m.getElementName().equals(name)
+                    && ReferenceCollector.paramSig(m)
+                            .equals(paramSig)) {
+                return m;
+            }
+        }
+        return null;
     }
 
     private static int offsetToLine(String source, int offset) {

@@ -1,13 +1,32 @@
-# `jdt source` output brainstorm
+# `jdt source` output design
 
 ## Core Principles
 
-1. **Zero-Modification Navigation**: Every FQMN in the output is a valid argument for `jdt source`. Copy-paste, no editing.
-2. **Badge-Link Separation**: Badges (`[M]`, `[C]`, ...) are visual prefixes, not part of the FQMN string.
-3. **Full Qualification**: Never truncate packages or params. The output is the source of truth for the next command.
-4. **Contextual Metadata**: Annotations like `(static)`, `→ returns [I] Type` follow the link, never break it.
-5. **No Self-References**: Don't list the viewed type/method in its own refs. We're already looking at it.
-6. **Byte-Exact Source**: Code inside ``` must be byte-for-byte identical to the file on disk — same tabs, line breaks, indentation. No normalization, no trimming.
+1. **Server Exhaustive, Client Formats**: The plugin computes ALL metadata exhaustively — for every reference: FQMN, type kind, file path, line range, javadoc, modifiers, resolved bounds, override targets, implementors, incoming callers. The CLI decides how to render it. Server never omits data; client experiments with presentation.
+
+2. **Deterministic Output**: The format is a contract. Every section either appears (when data exists) or doesn't (when data is empty). Never "collapsed", never "summarized", never behind a flag. The tool is predictable.
+
+3. **Zero-Modification Navigation**: Every FQMN in the output is a valid argument for `jdt source`. Copy-paste, no editing.
+
+4. **Badge-Link Separation**: Badges (`[M]`, `[C]`, ...) are visual prefixes, not part of the FQMN string.
+
+5. **Full Qualification**: Never truncate packages or params in FQMN links. Return types shown as full FQN (`java.lang.StringBuilder`, not `StringBuilder`).
+
+6. **Contextual Metadata**: Annotations like `(static)`, `(inherited)`, `→ ReturnType` follow the link, never break it.
+
+7. **No Self-References**: Don't list the viewed type/method in its own refs.
+
+8. **Byte-Exact Source**: Code inside ``` must be byte-for-byte identical to the file on disk — same tabs, line breaks, indentation.
+
+9. **Source Order**: Outgoing calls listed in source-appearance order.
+
+10. **Resolve Type Parameter Bounds**: Generic return types resolved to upper bound via `IMethodBinding.getReturnType()` at call site. When bound is `Object` → show `→ ?`.
+
+11. **Resolve @Override**: When method has `@Override`, resolve and show the declaring supertype/interface as a navigable FQMN.
+
+12. **Flat Calls**: No chain-call nesting. Chains are visible through source order — consecutive calls = likely chain.
+
+13. **Each Command Has One Job**: `jdt source` = source code + references. `jdt type-info` = compact structural overview. Don't mix them.
 
 ## Badge Legend
 
@@ -18,379 +37,192 @@
 
 ---
 
-# Example 1 — formatName (simple: project refs only)
+# Server JSON Contract
 
-`jdt source "com.example.client.view.task.TaskUtils.formatName(TaskGoal, boolean)"`
+The plugin returns source + flat array of refs. The client does all grouping, ordering, formatting.
 
-## V1 — Current output
+Implementation: `ReferenceCollector` (outgoing refs via AST), `SearchHandler.collectIncomingRefs` (incoming refs via SearchEngine), `SourceReport.toJson` (JSON assembly).
 
-#### com.example.client.view.task.TaskUtils#formatName(TaskGoal, boolean)
-`D:\git\myapp\client\src\main\java\com\example\web\client\view\task\TaskUtils.java:542-555`
+## Top-level response
 
-```java
-	/**
-	 * System groups
-	 *
-	 * @param goalStandard			- goal
-	 * @param currentUserStandard   - whether the goal belongs to the current user
-	 * @return formatted goal name
-	 */
-	public static String formatName(TaskGoal goalStandard, boolean currentUserStandard) {
-		if (goalStandard.isSystem()) {
-			SystemGroup group = SystemGroup.findById(goalStandard.getId());
-			return I18nFactory.getAppI18n().systemGroupName(group, currentUserStandard);
-		}
-		return I18nFactory.getFunctionI18n().displayName(goalStandard);
-	}
+```json
+{
+  "fqmn":      "pkg.Class#method(Param)",
+  "file":      "D:\\...\\Class.java",
+  "startLine": 42,
+  "endLine":   55,
+  "source":    "..byte-exact source..",
+  "overrideTarget": "interface pkg.Interface#method(Param)",
+  "refs": [ ...ref objects... ]
+}
 ```
 
-**com.example.shared.model.TaskGoal:**
-`D:\git\myapp\shared\src\main\java\com\example\web\shared\core\task\goal\TaskGoal.java`
+For type-level (no `#method`), `refs` is replaced by `supertypes`, `subtypes`, and optionally `enclosingType`.
 
-- `com.example.shared.model.TaskGoal#isSystem()` → `boolean`
+## Ref object
 
-**com.example.shared.model.TaskGoal.SystemGroup:**
-`D:\git\myapp\shared\src\main\java\com\example\web\shared\core\task\goal\TaskGoal.java`
-System groups
+Every ref in the `refs` array carries all metadata. Client never needs a second query.
 
-- `com.example.shared.model.TaskGoal.SystemGroup#findById(int)` → `com.example.shared.model.TaskGoal.SystemGroup`
-
-**com.example.dto.core.Persistent:**
-`D:\git\myapp\dao\src\main\java\com\example\dto\web\core\Persistent.java`
-
-- `com.example.dto.core.Persistent#getId()` → `java.lang.Integer`
-
-**com.example.client.message.I18nFactory:**
-`D:\git\myapp\client\src\main\java\com\example\web\client\message\I18nFactory.java`
-
-- `com.example.client.message.I18nFactory#getAppI18n()` → `com.example.client.message.AppI18n`
-- `com.example.client.message.I18nFactory#getFunctionI18n()` → `com.example.shared.message.FunctionI18n`
-
-**com.example.client.message.AppI18n:**
-`D:\git\myapp\client\src\main\java\com\example\web\client\message\AppI18n.java`
-
-- `com.example.client.message.AppI18n#systemGroupName(SystemGroup,boolean)` → `java.lang.String`
-
-**com.example.shared.message.FunctionI18n:**
-`D:\git\myapp\client\src\main\java\com\example\web\shared\message\FunctionI18n.java`
-
-- `com.example.shared.message.FunctionI18n#displayName(TaskGoal)` → `java.lang.String`
-
-### V1 Observations
-
-What's there:
-- Source with javadoc
-- Refs grouped by declaring type (project scope)
-- File paths (absolute), return types, javadoc first sentence
-
-What's missing:
-- No type kind — can't tell TaskGoal is a class, AppI18n is an interface, SystemGroup is an enum
-- No distinction between method calls vs type references
-- No interface implementations
-- Return types fully qualified: `java.lang.String` instead of `String`
-- No indication of static vs instance calls
-- No related commands hint
-
-## V2 — Proposed
-
-[M] com.example.client.view.task.TaskUtils#formatName(TaskGoal, boolean)
-`D:\git\myapp\client\src\main\java\com\example\web\client\view\task\TaskUtils.java:542-555`
-
-```java
-	/**
-	 * System groups
-	 *
-	 * @param goalStandard			- goal
-	 * @param currentUserStandard   - whether the goal belongs to the current user
-	 * @return formatted goal name
-	 */
-	public static String formatName(TaskGoal goalStandard, boolean currentUserStandard) {
-		if (goalStandard.isSystem()) {
-			SystemGroup group = SystemGroup.findById(goalStandard.getId());
-			return I18nFactory.getAppI18n().systemGroupName(group, currentUserStandard);
-		}
-		return I18nFactory.getFunctionI18n().displayName(goalStandard);
-	}
+```json
+{
+  "fqmn":           "pkg.Other#doStuff(String)",
+  "direction":      "outgoing",
+  "kind":           "method",
+  "typeKind":       "class",
+  "scope":          "project",
+  "file":           "D:\\...\\Other.java",
+  "line":           100,
+  "endLine":        115,
+  "type":           "Customer",
+  "returnTypeFqn":  "pkg.model.Customer",
+  "returnTypeKind": "class",
+  "typeBound":      "Customer",
+  "static":         false,
+  "inherited":      true,
+  "inheritedFrom":  "pkg.Ancestor",
+  "implementationOf": null,
+  "doc":            "First sentence of javadoc."
+}
 ```
 
-Outgoing Calls:
-- [M] `com.example.shared.model.TaskGoal#isSystem()` → boolean
-- [M] `com.example.shared.model.TaskGoal.SystemGroup#findById(int)` → SystemGroup (static)
-- [M] `com.example.dto.core.Persistent#getId()` → Integer (inherited)
-- [M] `com.example.client.message.I18nFactory#getAppI18n()` → [I] AppI18n (static)
-- [M] `com.example.client.message.I18nFactory#getFunctionI18n()` → [I] FunctionI18n (static)
-- [M] `com.example.client.message.AppI18n#systemGroupName(SystemGroup, boolean)` → String (interface call)
-- [M] `com.example.shared.message.FunctionI18n#displayName(TaskGoal)` → String (interface call)
+### Key fields
 
-Implementations:
-*(interface methods called above → workspace implementors)*
-- [M] `com.example.client.message.AppI18nImpl#systemGroupName(SystemGroup, boolean)`
-- [M] `com.example.client.message.mock.MockAppI18n#systemGroupName(SystemGroup, boolean)`
+- **`direction`**: `outgoing` (AST visitor over method body) or `incoming` (SearchEngine workspace query).
+- **`typeKind`**: kind of the DECLARING type. Enables `[C]`/`[I]`/`[E]`/`[A]` badges.
+- **`type`** + **`returnTypeFqn`**: return type resolved at call site via `IMethodBinding.getReturnType()`, not from declaration. Full FQN always present (including `java.*`).
+- **`returnTypeKind`**: enables badge on return type (e.g. `→ [I] org.eclipse.jdt.core.IType`).
+- **`typeBound`**: resolved upper bound when return type is a type parameter. Null when concrete or bound is Object.
+- **`inherited`** + **`inheritedFrom`**: method declared in ancestor, called on subtype. Detected by comparing receiver type with declaring class at call site.
+- **`implementationOf`**: links implementation ref back to the interface method FQMN. Null for non-implementation refs.
+- **`overrideTarget`**: top-level field (not per-ref). Format: `"interface pkg.Type#method()"` or `"class pkg.Type#method()"`. Resolved via supertype hierarchy walk.
 
-Types:
-- [C] `com.example.shared.model.TaskGoal` — .../TaskGoal.java
-- [E] `com.example.shared.model.TaskGoal.SystemGroup` — .../TaskGoal.java
-- [C] `com.example.dto.core.Persistent` — .../Persistent.java
-- [C] `com.example.client.message.I18nFactory` — .../I18nFactory.java
-- [I] `com.example.client.message.AppI18n` — .../AppI18n.java
-- [I] `com.example.shared.message.FunctionI18n` — .../FunctionI18n.java
+### Implementation resolution
 
-### V2 Observations (Example 1)
+For each outgoing ref where `typeKind: "interface"` and `kind: "method"`, the server resolves implementations via `IType.newTypeHierarchy(null)` → `getAllSubtypes()`. Scope: workspace + classpath. JDK interfaces filtered by `isJdkType`. No cardinality caps.
 
-- Implementations section is hypothetical — actual `jdt impl` returns "(no implementors)" for both AppI18n and FunctionI18n (GWT generates implementations outside workspace). In real output this section would be absent.
-- Return types are now simple names: `String` not `java.lang.String`, `SystemGroup` not full FQN. Less noise.
-- `→ [I] AppI18n` signals: "return type is an interface" — cue for polymorphism.
-- `(inherited)` on `Persistent#getId()` — getId is called on TaskGoal but declared in ancestor Persistent.
-- Types section has short path hints (`.../FileName.java`) — enough to see which module without full path noise. Full path is in the FQMN itself if needed.
+### Server responsibilities
+
+- Collects outgoing refs (AST visitor in `ReferenceCollector`)
+- Collects incoming refs (SearchEngine in `SearchHandler.collectIncomingRefs`)
+- Resolves implementations for interface method calls
+- Resolves @Override target
+- Resolves type hierarchy for type-level requests
+- No grouping, no ordering, no filtering, no formatting
 
 ---
 
-# Example 2 — handleKeyEvent (rich: same-class + project + dependency refs)
+# Method-level Output
 
-`jdt source "com.example.client.view.task.TreeNodeApi.handleKeyEvent(T, NativeEvent)"`
+`jdt source "io.github.kaluchi.jdtbridge.Json#put(String,String)"`
 
-## V1 — Current output
+```
+#### [M] io.github.kaluchi.jdtbridge.Json#put(String, String)
+`D:\...\Json.java:32-43`
 
-#### com.example.client.view.task.TreeNodeApi#handleKeyEvent(T, NativeEvent)
-`D:\git\myapp\client\src\main\java\com\example\web\client\view\task\TreeNodeApi.java:3376-3403`
+​```java
+    Json put(String key, String value) {
+        comma();
+        appendKey(key);
+        if (value == null) {
+            sb.append("null");
+        } else {
+            sb.append('"').append(escape(value)).append('"');
+        }
+        return this;
+    }
+​```
 
-```java
-	@Override
-	public boolean handleKeyEvent(T presenter, NativeEvent nativeEvent) {
-		final EventTarget eventTarget = nativeEvent.getEventTarget();
-		final boolean multiSelect = presenter.getModel().getTableContext().getSelectionModel().isMultiSelect();
-		if (!multiSelect && Element.is(eventTarget)) {
-			final Element target = Element.as(eventTarget);
-			final boolean isMeta = UiHelper.isCmdPressed(nativeEvent);
-			final boolean shiftKey = nativeEvent.getShiftKey();
-			final int keyCode = nativeEvent.getKeyCode();
-			if (keyCode == KeyCodes.KEY_C && isMeta && !KeyboardManager.isTargetEditable(target) && !DomHelper.hasExpandedSelection()) {
-				return tryCopyName(presenter, nativeEvent);
-			} else if (!KeyboardManager.isTargetEditable(target) && !shiftKey && handleAction(presenter, keyCode, isMeta)) {
-				nativeEvent.stopPropagation();
-				nativeEvent.preventDefault();
-				return true;
-			} else if (!KeyboardManager.isTargetEditable(target) && keyCode == KeyCodes.KEY_C && nativeEvent.getAltKey()) {
-				handleCopyKey(presenter);
-			} else if (KeyboardManager.isTargetEditable(target)
-					&& presenter.getSelectedPresenter().getNameBox().getElement().isOrHasChild(target)
-					&& !presenter.getSelectedPresenter().getModel().getItem().isStub()) {
-				// handle some hotkeys during editing
-				if (keyCode == KeyCodes.KEY_BACKSPACE || keyCode == KeyCodes.KEY_DELETE) {
-					tryDeleteNode(presenter, keyCode, isMeta);
-				}
-			}
-		}
-		return false;
-	}
+#### Outgoing Calls:
+[C] `io.github.kaluchi.jdtbridge.Json`
+[M] `io.github.kaluchi.jdtbridge.Json#comma()` → `void`
+[M] `io.github.kaluchi.jdtbridge.Json#appendKey(String)` → `void`
+[F] `io.github.kaluchi.jdtbridge.Json#sb` → [C] `java.lang.StringBuilder`
+[M] `io.github.kaluchi.jdtbridge.Json#escape(String)` → [C] `java.lang.String` (static) — JSON string escaping.
+
+#### Incoming Calls:
+[M] `io.github.kaluchi.jdtbridge.Activator.writeBridgeFile(int, String, String, String)`
+[M] `io.github.kaluchi.jdtbridge.SourceReport.toJson(...)`
+...
 ```
 
-**TreeNodeApi:**
+### Format details
 
-- `com.example.client.view.task.TreeNodeApi#tryCopyName(T,NativeEvent)` → `boolean` :3593-3605
+- **Header**: `#### [M] FQMN` — badge inferred from FQMN (`#` = method, no `#` = type)
+- **Override**: `overrides [M] \`pkg.Interface#method()\`` — shown when `overrideTarget` present
+- **Location**: `` `file:startLine-endLine` ``
+- **Source**: byte-exact code block
+- **Outgoing Calls**: grouped by declaring type, flat list (no indentation). Javadoc inline after ` — `. Implementations shown inline with `→` prefix after the interface method they implement.
+- **Incoming Calls**: flat list of callers, grouped by declaring type.
 
-- `com.example.client.view.task.TreeNodeApi#handleAction(T,int,boolean)` → `boolean` :3451-3485
+### Implementation inline example
 
-- `com.example.client.view.task.TreeNodeApi#handleCopyKey(T)` → `void` :3435-3449
-
-- `com.example.client.view.task.TreeNodeApi#tryDeleteNode(T,int,boolean)` → `void` :3405-3410
-
-
-**com.example.components.client.mvp.AbstractPresenter:**
-`D:\git\myapp\client\src\main\java\com\example\components\client\mvp\AbstractPresenter.java`
-
-- `com.example.components.client.mvp.AbstractPresenter#getModel()` → `ModelT`
-
-**com.example.components.client.treetable.TableNodeModel:**
-`D:\git\myapp\client\src\main\java\com\example\components\client\treetable\TableNodeModel.java`
-
-- `com.example.components.client.treetable.TableNodeModel#getTableContext()` → `C`
-- `com.example.components.client.treetable.TableNodeModel#getItem()` → `T`
-
-**com.example.client.view.task.TreeNodeContext:**
-`D:\git\myapp\client\src\main\java\com\example\web\client\view\task\TreeNodeContext.java`
-
-- `com.example.client.view.task.TreeNodeContext#getSelectionModel()` → `com.example.components.client.treetable.selection.SelectionModel`
-
-**com.example.components.client.treetable.selection.SelectionModel:**
-`D:\git\myapp\client\src\main\java\com\example\components\client\treetable\selection\SelectionModel.java`
-
-- `com.example.components.client.treetable.selection.SelectionModel#isMultiSelect()` → `boolean`
-
-**com.example.components.client.util.UiHelper:**
-`D:\git\myapp\client\src\main\java\com\example\components\client\util\UiHelper.java`
-
-- `com.example.components.client.util.UiHelper#isCmdPressed(NativeEvent)` → `boolean`
-
-**com.example.components.client.hotkey.KeyboardManager:**
-`D:\git\myapp\client\src\main\java\com\example\components\client\hotkey\KeyboardManager.java`
-Global keyboard shortcut handler.
-
-- `com.example.components.client.hotkey.KeyboardManager#isTargetEditable(Element)` → `boolean`
-  Returns true for textarea/input/div[contenteditable] without readonly attribute.
-
-**com.example.components.client.DomHelper:**
-`D:\git\myapp\client\src\main\java\com\example\components\client\DomHelper.java`
-
-- `com.example.components.client.DomHelper#hasExpandedSelection()` → `boolean`
-  Checks if there is a text selection on the page.
-
-**com.example.components.client.treetable.SupervisingTablePresenter:**
-`D:\git\myapp\client\src\main\java\com\example\components\client\treetable\SupervisingTablePresenter.java`
-
-- `com.example.components.client.treetable.SupervisingTablePresenter#getSelectedPresenter()` → `PresenterImplT`
-
-**com.example.client.view.task.node.TreeNodePresenter:**
-`D:\git\myapp\client\src\main\java\com\example\web\client\view\task\node\TreeNodePresenter.java`
-
-- `com.example.client.view.task.node.TreeNodePresenter#getNameBox()` → `com.example.components.client.base.EditableArea`
-
-**com.example.shared.model.TreeItem:**
-`D:\git\myapp\shared\src\main\java\com\example\web\shared\core\task\TreeItem.java`
-
-- `com.example.shared.model.TreeItem#isStub()` → `boolean`
-
-**References:**
-- `T`
-- `com.google.gwt.dom.client.NativeEvent`
-- `com.google.gwt.dom.client.EventTarget`
-- `com.google.gwt.dom.client.NativeEvent#getEventTarget()`
-- `com.google.gwt.dom.client.Element`
-- `com.google.gwt.dom.client.Element#is(JavaScriptObject)`
-- `com.google.gwt.dom.client.Element#as(JavaScriptObject)`
-- `com.google.gwt.dom.client.NativeEvent#getShiftKey()`
-- `com.google.gwt.dom.client.NativeEvent#getKeyCode()`
-- `com.google.gwt.event.dom.client.KeyCodes`
-- `com.google.gwt.event.dom.client.KeyCodes#KEY_C`
-- `com.google.gwt.dom.client.NativeEvent#stopPropagation()`
-- `com.google.gwt.dom.client.NativeEvent#preventDefault()`
-- `com.google.gwt.dom.client.NativeEvent#getAltKey()`
-- `com.google.gwt.user.client.ui.UIObject#getElement()`
-- `com.google.gwt.dom.client.Node#isOrHasChild(Node)`
-- `com.google.gwt.event.dom.client.KeyCodes#KEY_BACKSPACE`
-- `com.google.gwt.event.dom.client.KeyCodes#KEY_DELETE`
-
-### V1 Observations
-
-All three ref scopes visible:
-
-**Same-class (4 refs):** Has line ranges — good for 3600+ line class. But header is just bold "TreeNodeApi:" — no type kind, no file path, no visual distinction from project refs.
-
-**Project (9 refs, 8 types):** Chain calls `presenter.getModel().getTableContext().getSelectionModel().isMultiSelect()` split across 4 separate type sections — the chain is invisible. Generic return types (`ModelT`, `C`, `T`) are erased type params — not helpful.
-
-**Dependency (19 refs):** Flat wall of FQMNs. Mix of types, methods, constants — no grouping. `T` type parameter leaked in as a ref. These are navigable via `jdt source` (GWT sources attached) but nothing hints at that.
-
-**Pain points:**
-1. Same-class vs project — visually identical, just bold class name
-2. 19 dependency refs — wall of text, no structure
-3. `@Override` in source but no info on what interface/superclass it implements
-4. Chain calls invisible — each hop is a separate type section
-
-## V2 — Proposed
-
-[M] com.example.client.view.task.TreeNodeApi#handleKeyEvent(T, NativeEvent) @Override
-`D:\git\myapp\client\src\main\java\com\example\web\client\view\task\TreeNodeApi.java:3376-3403`
-
-```java
-	@Override
-	public boolean handleKeyEvent(T presenter, NativeEvent nativeEvent) {
-		final EventTarget eventTarget = nativeEvent.getEventTarget();
-		final boolean multiSelect = presenter.getModel().getTableContext().getSelectionModel().isMultiSelect();
-		if (!multiSelect && Element.is(eventTarget)) {
-			final Element target = Element.as(eventTarget);
-			final boolean isMeta = UiHelper.isCmdPressed(nativeEvent);
-			final boolean shiftKey = nativeEvent.getShiftKey();
-			final int keyCode = nativeEvent.getKeyCode();
-			if (keyCode == KeyCodes.KEY_C && isMeta && !KeyboardManager.isTargetEditable(target) && !DomHelper.hasExpandedSelection()) {
-				return tryCopyName(presenter, nativeEvent);
-			} else if (!KeyboardManager.isTargetEditable(target) && !shiftKey && handleAction(presenter, keyCode, isMeta)) {
-				nativeEvent.stopPropagation();
-				nativeEvent.preventDefault();
-				return true;
-			} else if (!KeyboardManager.isTargetEditable(target) && keyCode == KeyCodes.KEY_C && nativeEvent.getAltKey()) {
-				handleCopyKey(presenter);
-			} else if (KeyboardManager.isTargetEditable(target)
-					&& presenter.getSelectedPresenter().getNameBox().getElement().isOrHasChild(target)
-					&& !presenter.getSelectedPresenter().getModel().getItem().isStub()) {
-				// handle some hotkeys during editing
-				if (keyCode == KeyCodes.KEY_BACKSPACE || keyCode == KeyCodes.KEY_DELETE) {
-					tryDeleteNode(presenter, keyCode, isMeta);
-				}
-			}
-		}
-		return false;
-	}
+```
+[I] `org.eclipse.jdt.core.IType`
+[M] `org.eclipse.jdt.core.IType#isAnonymous()` → `boolean` — Returns whether this type represents an anonymous type.
+  → [M] `org.eclipse.jdt.internal.core.LambdaExpression#isAnonymous()`
+  → [M] `org.eclipse.jdt.internal.core.BinaryType#isAnonymous()`
+  → [M] `org.eclipse.jdt.internal.core.SourceType#isAnonymous()`
 ```
 
-Same-class:
-- [M] `com.example.client.view.task.TreeNodeApi#tryCopyName(T, NativeEvent)` → boolean :3593
-- [M] `com.example.client.view.task.TreeNodeApi#handleAction(T, int, boolean)` → boolean :3451
-- [M] `com.example.client.view.task.TreeNodeApi#handleCopyKey(T)` → void :3435
-- [M] `com.example.client.view.task.TreeNodeApi#tryDeleteNode(T, int, boolean)` → void :3405
+---
 
-Outgoing Calls:
-- [M] `com.example.components.client.mvp.AbstractPresenter#getModel()` → ModelT
-- [M] `com.example.components.client.treetable.TableNodeModel#getTableContext()` → C
-- [M] `com.example.client.view.task.TreeNodeContext#getSelectionModel()` → SelectionModel
-- [M] `com.example.components.client.treetable.selection.SelectionModel#isMultiSelect()` → boolean
-- [M] `com.example.components.client.util.UiHelper#isCmdPressed(NativeEvent)` → boolean (static)
-- [M] `com.example.components.client.hotkey.KeyboardManager#isTargetEditable(Element)` → boolean (static)
-  Returns true for textarea/input/div[contenteditable] without readonly.
-- [M] `com.example.components.client.DomHelper#hasExpandedSelection()` → boolean (static)
-  Checks if there is a text selection on the page.
-- [M] `com.example.components.client.treetable.SupervisingTablePresenter#getSelectedPresenter()` → PresenterImplT
-- [M] `com.example.client.view.task.node.TreeNodePresenter#getNameBox()` → EditableArea
-- [M] `com.example.shared.model.TreeItem#isStub()` → boolean
+# Type-level Output
 
-Dependencies:
-  [C] `com.google.gwt.dom.client.NativeEvent`
-  - [M] `com.google.gwt.dom.client.NativeEvent#getEventTarget()` → EventTarget
-  - [M] `com.google.gwt.dom.client.NativeEvent#getShiftKey()` → boolean
-  - [M] `com.google.gwt.dom.client.NativeEvent#getKeyCode()` → int
-  - [M] `com.google.gwt.dom.client.NativeEvent#stopPropagation()`
-  - [M] `com.google.gwt.dom.client.NativeEvent#preventDefault()`
-  - [M] `com.google.gwt.dom.client.NativeEvent#getAltKey()` → boolean
-  [C] `com.google.gwt.dom.client.Element`
-  - [M] `com.google.gwt.dom.client.Element#is(JavaScriptObject)` → boolean (static)
-  - [M] `com.google.gwt.dom.client.Element#as(JavaScriptObject)` → Element (static)
-  [C] `com.google.gwt.event.dom.client.KeyCodes`
-  - [K] `com.google.gwt.event.dom.client.KeyCodes#KEY_C`
-  - [K] `com.google.gwt.event.dom.client.KeyCodes#KEY_BACKSPACE`
-  - [K] `com.google.gwt.event.dom.client.KeyCodes#KEY_DELETE`
-  [C] `com.google.gwt.dom.client.EventTarget`
-  [C] `com.google.gwt.user.client.ui.UIObject`
-  - [M] `com.google.gwt.user.client.ui.UIObject#getElement()` → Element
-  [C] `com.google.gwt.dom.client.Node`
-  - [M] `com.google.gwt.dom.client.Node#isOrHasChild(Node)` → boolean
+`jdt source "org.eclipse.jdt.core.IType"`
 
-Types:
-- [C] `com.example.components.client.mvp.AbstractPresenter` — .../AbstractPresenter.java
-- [C] `com.example.components.client.treetable.TableNodeModel` — .../TableNodeModel.java
-- [C] `com.example.client.view.task.TreeNodeContext` — .../TreeNodeContext.java
-- [C] `com.example.components.client.treetable.selection.SelectionModel` — .../SelectionModel.java
-- [C] `com.example.components.client.util.UiHelper` — .../UiHelper.java
-- [C] `com.example.components.client.hotkey.KeyboardManager` — .../KeyboardManager.java
-- [C] `com.example.components.client.DomHelper` — .../DomHelper.java
-- [C] `com.example.components.client.treetable.SupervisingTablePresenter` — .../SupervisingTablePresenter.java
-- [C] `com.example.client.view.task.node.TreeNodePresenter` — .../TreeNodePresenter.java
-- [C] `com.example.shared.model.TreeItem` — .../TreeItem.java
+Full source of the type (byte-exact, with `file:from-to`), followed by hierarchy — the only information NOT visible in the source code.
 
-### V2 Observations (Example 2)
+No outgoing calls, no incoming calls — those are method-level concerns.
 
-Key differences from V1:
+```
+#### [C] org.eclipse.jdt.core.IType
+`D:\eclipse\...\IType.java:1-850`
 
-1. **Same-class is a distinct section** — no longer blends into project refs. Line numbers give orientation in the 3600-line file.
+​```java
+public interface IType extends IMember, IAnnotatable {
+    ...full source...
+}
+​```
 
-2. **Dependencies grouped by type** — 19 flat refs became 6 typed groups. NativeEvent's 6 methods, Element's 2, KeyCodes' 3 constants — scannable. `[K]` badge on constants distinguishes them from method calls.
+#### Hierarchy:
+↑ [I] `org.eclipse.jdt.core.IMember`
+↑ [I] `org.eclipse.jdt.core.IAnnotatable`
+↓ [C] `org.eclipse.jdt.internal.core.BinaryType`
+↓ [C] `org.eclipse.jdt.internal.core.SourceType`
+```
 
-3. **`@Override` in header** — signals this implements a contract. (TODO: resolve which interface/superclass declares `handleKeyEvent` and show it.)
+### Hierarchy fields
 
-4. **Javadoc inline** on `isTargetEditable` and `hasExpandedSelection` — only where it exists, directly under the ref. No separate type header needed.
+- **Supertypes** (↑): resolved from `ITypeHierarchy.getSuperclass()` + `getSuperInterfaces()`. `java.lang.Object` filtered.
+- **Subtypes** (↓): direct subtypes from `ITypeHierarchy.getSubtypes()`. Anonymous types filtered.
+- **Enclosing Type**: for nested/inner types, links to parent via `IType.getDeclaringType()`.
 
-5. **`T` type parameter filtered out** — was a noise ref in V1 (`- T`). Type params are not navigable.
+### JSON for type-level
 
-6. **No Implementations section** — no interface method calls detected in outgoing calls (all project calls are to concrete classes). Section correctly absent.
+```json
+{
+  "fqmn": "org.eclipse.jdt.core.IType",
+  "file": "...",
+  "startLine": 1,
+  "endLine": 850,
+  "source": "...full source...",
+  "supertypes": [
+    { "fqn": "org.eclipse.jdt.core.IMember", "kind": "interface" },
+    { "fqn": "org.eclipse.jdt.core.IAnnotatable", "kind": "interface" }
+  ],
+  "subtypes": [
+    { "fqn": "org.eclipse.jdt.internal.core.BinaryType", "kind": "class" },
+    { "fqn": "org.eclipse.jdt.internal.core.SourceType", "kind": "class" }
+  ]
+}
+```
 
-Open questions:
-- Should Dependencies section even appear by default? It's 19 refs of GWT boilerplate. Could be behind `--deps` flag or shown only when dependency count is small.
-- Generic return types (`ModelT`, `C`, `PresenterImplT`) — erased params, not useful. Show them? Replace with `?`? Or resolve the actual bound?
+---
+
+# Open Questions
+
+1. **Package-level** — `jdt source "com.example.shared.model"` could show types in package + package-info.java javadoc.
+
+2. **Inner class navigation** — sibling inner classes: show "Also nested in Outer: [E] Color, [C] Builder"?
+
+3. **`--json` flag** — implemented in CLI for debugging. Consider making it permanent for programmatic consumers.

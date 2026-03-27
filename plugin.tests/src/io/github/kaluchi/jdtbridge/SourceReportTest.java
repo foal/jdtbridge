@@ -121,18 +121,18 @@ public class SourceReportTest {
         }
 
         @Test
-        void fullClassSkipsSameClassRefs() throws Exception {
+        void fullClassHasHierarchyNotRefs() throws Exception {
             IType type = JdtUtils.findType("test.model.Dog");
             var refs = ReferenceCollector.collect(type);
             String json = SourceReport.toJson(
                     "test.model.Dog", type,
                     "D:/test/Dog.java",
-                    type.getSource(), 1, 20, refs);
-            // Should not have scope=class refs (all members
-            // already in source)
-            assertFalse(json.contains("\"scope\":\"class\""),
-                    "Full class should skip same-class refs: "
-                            + json);
+                    type.getSource(), 1, 20, refs, null);
+            // Type-level: hierarchy, no outgoing refs
+            assertTrue(json.contains("\"supertypes\""),
+                    "Should have supertypes: " + json);
+            assertFalse(json.contains("\"refs\""),
+                    "Should not have refs: " + json);
         }
 
         @Test
@@ -145,7 +145,7 @@ public class SourceReportTest {
             String json = SourceReport.toJson(
                     "test.service.AnimalService#process",
                     methods[0], "D:/test/AnimalService.java",
-                    methods[0].getSource(), 1, 10, refs);
+                    methods[0].getSource(), 1, 10, refs, null);
             // May have class-scope refs if method references
             // other members
             assertTrue(json.contains("\"fqmn\""),
@@ -164,7 +164,8 @@ public class SourceReportTest {
                     String json = SourceReport.toJson(
                             "test", type, "D:/test.java",
                             "code", 1, 1,
-                            java.util.Map.of(ref.fqmn(), ref));
+                            java.util.Map.of(ref.fqmn(), ref),
+                            null);
                     assertFalse(json.contains("\"type\":\"void\""),
                             "Constructor should not have void type: "
                                     + json);
