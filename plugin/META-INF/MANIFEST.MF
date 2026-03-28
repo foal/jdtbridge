@@ -3,7 +3,7 @@ Bundle-ManifestVersion: 2
 Bundle-Name: JDT Bridge
 Bundle-Vendor: kaluchi
 Bundle-SymbolicName: io.github.kaluchi.jdtbridge;singleton:=true
-Bundle-Version: 1.5.0.qualifier
+Bundle-Version: 1.6.0.qualifier
 Bundle-Activator: io.github.kaluchi.jdtbridge.Activator
 Bundle-RequiredExecutionEnvironment: JavaSE-21
 Automatic-Module-Name: io.github.kaluchi.jdtbridge
