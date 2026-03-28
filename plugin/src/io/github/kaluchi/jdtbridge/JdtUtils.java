@@ -8,6 +8,7 @@ import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.ITypeHierarchy;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.JavaModelException;
@@ -58,10 +59,28 @@ class JdtUtils {
         return result;
     }
 
+    /**
+     * Split comma-separated param types, respecting generics.
+     * {@code "Map<String,Integer>,int"} → {@code ["Map<String,Integer>", "int"]}.
+     */
     static String[] parseParamTypes(String s) {
         if (s == null) return null;
         if (s.isEmpty()) return new String[0];
-        return s.split(",");
+        var params = new java.util.ArrayList<String>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '<') depth++;
+            else if (c == '>') depth--;
+            else if (c == ',' && depth == 0) {
+                params.add(s.substring(start, i).trim());
+                start = i + 1;
+            }
+        }
+        String last = s.substring(start).trim();
+        if (!last.isEmpty()) params.add(last);
+        return params.toArray(String[]::new);
     }
 
     private static boolean matchesParamTypes(IMethod m,
@@ -134,9 +153,55 @@ class JdtUtils {
         String[] paramTypes = m.getParameterTypes();
         for (int i = 0; i < paramTypes.length; i++) {
             if (i > 0) sig.append(", ");
-            sig.append(Signature.toString(paramTypes[i]));
+            sig.append(Signature.toString(
+                    Signature.getTypeErasure(paramTypes[i])));
         }
         sig.append(")");
         return sig.toString();
+    }
+
+    /**
+     * Find all implementations of an interface/abstract method
+     * via type hierarchy. Returns FQMN → IMethod map.
+     * Shared by SourceReport and SearchHandler.
+     */
+    static java.util.LinkedHashMap<String, IMethod>
+            findImplementations(IMethod method)
+            throws JavaModelException {
+        var result =
+                new java.util.LinkedHashMap<String, IMethod>();
+        IType declaringType = method.getDeclaringType();
+        if (declaringType == null) return result;
+        if (!declaringType.isInterface()
+                && !java.lang.reflect.Modifier.isAbstract(
+                        declaringType.getFlags()))
+            return result;
+
+        String methodName = method.getElementName();
+        String paramSig;
+        try {
+            paramSig = ReferenceCollector.paramSig(method);
+        } catch (Exception e) { return result; }
+
+        ITypeHierarchy hierarchy =
+                declaringType.newTypeHierarchy(null);
+
+        for (IType sub
+                : hierarchy.getAllSubtypes(declaringType)) {
+            try {
+                for (IMethod m : sub.getMethods()) {
+                    if (!m.getElementName()
+                            .equals(methodName)) continue;
+                    if (!ReferenceCollector.paramSig(m)
+                            .equals(paramSig)) continue;
+                    result.put(
+                            sub.getFullyQualifiedName()
+                            + "#" + compactSignature(m),
+                            m);
+                    break;
+                }
+            } catch (Exception e) { /* skip */ }
+        }
+        return result;
     }
 }

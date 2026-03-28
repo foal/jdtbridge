@@ -49,7 +49,18 @@ class ReferenceCollector {
             String typeBound,
             boolean isInherited,
             String inheritedFrom,
-            String implementationOf) {}
+            String implementationOf) {
+
+        /** Return a copy with implementationOf set. */
+        Ref withImplementationOf(String implOf) {
+            return new Ref(fqmn, element, kind,
+                    declaringTypeKind, isStatic,
+                    resolvedType, resolvedTypeFqn,
+                    resolvedTypeKind, isTypeVariable,
+                    typeBound, isInherited, inheritedFrom,
+                    implOf);
+        }
+    }
 
     enum RefKind { FIELD, METHOD, TYPE, CONSTANT }
 
@@ -172,6 +183,69 @@ class ReferenceCollector {
         }
     }
 
+    /**
+     * For each outgoing interface/abstract type ref, resolve
+     * direct subtypes and add them as refs with implementationOf
+     * linking back to the interface type FQN. If a subtype
+     * already exists in refs, updates it with the link.
+     */
+    static void resolveTypeSubtypes(
+            Map<String, Ref> refs) {
+        List<Ref> subtypeRefs = new ArrayList<>();
+        for (Ref ref : refs.values()) {
+            if (ref.kind() != RefKind.TYPE) continue;
+            String dk = ref.declaringTypeKind();
+            if (!"interface".equals(dk)
+                    && !"class".equals(dk)) continue;
+            if (ref.element() == null) continue;
+
+            try {
+                IType type = (IType) ref.element();
+                // Only resolve for interfaces and abstract classes
+                if (!type.isInterface()
+                        && !java.lang.reflect.Modifier.isAbstract(
+                                type.getFlags()))
+                    continue;
+
+                ITypeHierarchy hierarchy =
+                        type.newTypeHierarchy(null);
+                for (IType sub : hierarchy.getSubtypes(type)) {
+                    String subFqn =
+                            sub.getFullyQualifiedName();
+                    if (isJdkType(subFqn)) continue;
+
+                    // If subtype already in refs (e.g. used as
+                    // a local var type), update it with the
+                    // implementationOf link instead of skipping
+                    Ref existing = refs.get(subFqn);
+                    if (existing != null) {
+                        if (existing.implementationOf() == null) {
+                            subtypeRefs.add(existing
+                                    .withImplementationOf(
+                                            ref.fqmn()));
+                        }
+                        continue;
+                    }
+
+                    String typeKind = sub.isInterface()
+                            ? "interface"
+                            : sub.isEnum() ? "enum"
+                            : sub.isAnnotation()
+                            ? "annotation" : "class";
+
+                    subtypeRefs.add(new Ref(subFqn, sub,
+                            RefKind.TYPE, typeKind,
+                            false, null, null, null,
+                            false, null, false, null,
+                            ref.fqmn()));
+                }
+            } catch (Exception e) { /* skip */ }
+        }
+        for (Ref st : subtypeRefs) {
+            refs.put(st.fqmn(), st);
+        }
+    }
+
     static String paramSig(IMethod m)
             throws JavaModelException {
         var paramTypes = m.getParameterTypes();
@@ -180,7 +254,8 @@ class ReferenceCollector {
         for (int i = 0; i < paramTypes.length; i++) {
             if (i > 0) sb.append(",");
             sb.append(org.eclipse.jdt.core.Signature.toString(
-                    paramTypes[i]));
+                    org.eclipse.jdt.core.Signature
+                            .getTypeErasure(paramTypes[i])));
         }
         return sb.toString();
     }
@@ -351,7 +426,7 @@ class ReferenceCollector {
         var sb = new StringBuilder();
         for (int i = 0; i < params.length; i++) {
             if (i > 0) sb.append(",");
-            sb.append(params[i].getName());
+            sb.append(params[i].getErasure().getName());
         }
         return sb.toString();
     }

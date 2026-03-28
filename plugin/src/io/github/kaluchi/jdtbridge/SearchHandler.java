@@ -294,31 +294,17 @@ class SearchHandler {
 
         ITypeHierarchy hierarchy = type.newTypeHierarchy(null);
 
-        // Superclass chain
         var supers = new JsonArray();
-        IType current = type;
-        while (true) {
-            IType superType = hierarchy.getSuperclass(current);
-            if (superType == null) break;
-            supers.add(typeEntry(superType));
-            current = superType;
-        }
+        SourceReport.addSupersRecursive(
+                supers, hierarchy, type, 0);
 
-        // All super interfaces
-        var interfaces = new JsonArray();
-        for (IType iface : hierarchy.getAllSuperInterfaces(type)) {
-            interfaces.add(typeEntry(iface));
-        }
-
-        // Subtypes
         var subtypes = new JsonArray();
-        for (IType sub : hierarchy.getAllSubtypes(type)) {
-            subtypes.add(typeEntry(sub));
-        }
+        SourceReport.addSubsRecursive(
+                subtypes, hierarchy, type, 0);
 
         var result = new JsonObject();
-        result.add("supers", supers);
-        result.add("interfaces", interfaces);
+        result.addProperty("fqn", fqn);
+        result.add("supertypes", supers);
         result.add("subtypes", subtypes);
         return result.toString();
     }
@@ -346,31 +332,18 @@ class SearchHandler {
                     + " in " + fqn);
         }
 
-        int arity = method.getNumberOfParameters();
-        ITypeHierarchy hierarchy = type.newTypeHierarchy(null);
+        var impls = JdtUtils.findImplementations(method);
         var arr = new JsonArray();
-        for (IType sub : hierarchy.getAllSubtypes(type)) {
+        for (var entry : impls.entrySet()) {
+            IMethod m = entry.getValue();
+            IType sub = m.getDeclaringType();
             if (sub.isAnonymous()) continue;
-            try {
-                for (IMethod m : sub.getMethods()) {
-                    if (m.getElementName().equals(methodName)
-                            && m.getNumberOfParameters()
-                                    == arity) {
-                        var e = new JsonObject();
-                        e.addProperty("fqn",
-                                sub.getFullyQualifiedName());
-                        e.addProperty("file",
-                                filePath(sub));
-                        e.addProperty("line",
-                                getLineOfMember(m));
-                        arr.add(e);
-                        break;
-                    }
-                }
-            } catch (JavaModelException e) {
-                Log.warn("Skipping type "
-                        + sub.getFullyQualifiedName(), e);
-            }
+            var e = new JsonObject();
+            e.addProperty("fqn",
+                    sub.getFullyQualifiedName());
+            e.addProperty("file", filePath(sub));
+            e.addProperty("line", getLineOfMember(m));
+            arr.add(e);
         }
         return arr.toString();
     }
@@ -516,6 +489,12 @@ class SearchHandler {
             String fullSource, Map<String, String> params)
             throws Exception {
         int[] lines = memberLines(member, fullSource);
+        // Top-level type: include package + imports (from line 1)
+        // Inner classes keep their declaration range
+        if (member instanceof IType t && methodName == null
+                && t.getDeclaringType() == null) {
+            lines[0] = 1;
+        }
         // Read from disk to preserve indentation
         String source = sourceFromDisk(absPath,
                 lines[0], lines[1]);

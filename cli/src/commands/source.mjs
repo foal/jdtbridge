@@ -1,5 +1,6 @@
 import { get } from "../client.mjs";
 import { extractPositional, parseFqmn } from "../args.mjs";
+import { formatHierEntry } from "../format/hierarchy.mjs";
 
 export async function source(args) {
   const jsonFlag = args.includes("--json");
@@ -91,8 +92,8 @@ function formatMemberRef(ref) {
   if (ref.inherited) annotations.push("inherited");
   if (annotations.length > 0) line += ` (${annotations.join(", ")})`;
 
-  // Line number (only for incoming)
-  if (ref.direction === "incoming" && ref.line) line += ` :${ref.line}`;
+  // Line number: server sends it but we don't render for incoming —
+  // callers are navigable by FQMN, line numbers just add noise
 
   // Javadoc inline after —
   if (ref.doc) line += ` — ${ref.doc}`;
@@ -126,19 +127,31 @@ function groupByDeclaringType(refs) {
   return groups;
 }
 
-function formatRefGroup({ typeFqn, group }, implIndex) {
+function formatRefGroup({ typeFqn, group }, implIndex, viewScope) {
   const lines = [];
-  if (group.typeRef) {
+  // Type header: only show for standalone type refs (no members).
+  // When members exist, the type is already visible in their FQMNs.
+  const standalone = group.members.length === 0;
+  if (standalone && group.typeRef) {
     lines.push(formatTypeHeader(group.typeRef));
-  } else if (group.members.length > 0) {
-    const tkBadge = TYPE_KIND_BADGE[group.members[0].typeKind] || "[C]";
-    lines.push(`${tkBadge} \`${typeFqn}\``);
+    // Show type implementations (domain-scoped)
+    const impls = implIndex[group.typeRef.fqmn];
+    if (impls && !(viewScope === "project" && group.typeRef.scope === "dependency")) {
+      for (const impl of impls) {
+        let implLine = `  ${badge(impl)} \`${impl.fqmn}\``;
+        if (impl.anonymous && impl.enclosingFqmn) {
+          implLine += ` — in \`${impl.enclosingFqmn}\``;
+        }
+        lines.push(implLine);
+      }
+    }
   }
   for (const ref of group.members) {
     lines.push(formatMemberRef(ref));
-    // Show implementations right after the interface method
+    // Show implementations — skip dependency interface impls
+    // when viewing project source (domain scoping)
     const impls = implIndex[ref.fqmn];
-    if (impls) {
+    if (impls && !(viewScope === "project" && ref.scope === "dependency")) {
       for (const impl of impls) {
         lines.push(`  → ${badge(impl)} \`${impl.fqmn}\``);
       }
@@ -159,21 +172,20 @@ function buildImplIndex(refs) {
   return index;
 }
 
+
 // ---- Hierarchy (type-level) ----
 
-function formatHierarchy(lines, result) {
+function formatHierarchySection(lines, result) {
   const supers = result.supertypes || [];
   const subs = result.subtypes || [];
   if (supers.length > 0 || subs.length > 0) {
     lines.push("");
     lines.push("#### Hierarchy:");
     for (const s of supers) {
-      const b = TYPE_KIND_BADGE[s.kind] || "[C]";
-      lines.push(`↑ ${b} \`${s.fqn}\``);
+      lines.push(...formatHierEntry("↑", s));
     }
     for (const s of subs) {
-      const b = TYPE_KIND_BADGE[s.kind] || "[C]";
-      lines.push(`↓ ${b} \`${s.fqn}\``);
+      lines.push(...formatHierEntry("", s));
     }
   }
   if (result.enclosingType) {
@@ -182,7 +194,7 @@ function formatHierarchy(lines, result) {
     const et = result.enclosingType;
     const fqn = typeof et === "string" ? et : et.fqn;
     const kind = typeof et === "string" ? "class" : (et.kind || "class");
-    lines.push(`${TYPE_KIND_BADGE[kind] || "[C]"} \`${fqn}\``);
+    lines.push(...formatHierEntry("", { fqn, kind, ...et }));
   }
 }
 
@@ -212,7 +224,7 @@ function formatMarkdown(result) {
 
   // Type-level: hierarchy instead of refs
   if (result.supertypes || result.subtypes) {
-    formatHierarchy(lines, result);
+    formatHierarchySection(lines, result);
     return lines.join("\n");
   }
 
@@ -220,9 +232,31 @@ function formatMarkdown(result) {
     return lines.join("\n");
   }
 
-  // Split by direction
-  const outgoing = result.refs.filter((r) => r.direction !== "incoming");
+  // Self-reference: the viewed member's declaring type
+  const selfFqn = result.fqmn.includes("#")
+    ? result.fqmn.split("#")[0] : null;
+
+  // Split by direction, filter self-reference type refs
+  const outgoing = result.refs.filter((r) =>
+    r.direction !== "incoming"
+    && !(r.kind === "type" && r.fqmn === selfFqn));
   const incoming = result.refs.filter((r) => r.direction === "incoming");
+
+  const viewScope = result.viewScope;
+
+  // Implementations section (interface/abstract methods)
+  const impls = result.implementations || [];
+  if (impls.length > 0) {
+    lines.push("");
+    lines.push("#### Implementations:");
+    for (const impl of impls) {
+      let line = `[M] \`${impl.fqmn}\``;
+      if (impl.anonymous && impl.enclosingFqmn) {
+        line += ` — in \`${impl.enclosingFqmn}\``;
+      }
+      lines.push(line);
+    }
+  }
 
   if (outgoing.length > 0) {
     const implIndex = buildImplIndex(outgoing);
@@ -231,7 +265,7 @@ function formatMarkdown(result) {
     lines.push("#### Outgoing Calls:");
     const groups = groupByDeclaringType(mainRefs);
     for (const g of groups) {
-      lines.push(formatRefGroup(g, implIndex));
+      lines.push(formatRefGroup(g, implIndex, viewScope));
     }
   }
 
@@ -242,7 +276,7 @@ function formatMarkdown(result) {
     lines.push("#### Incoming Calls:");
     const groups = groupByDeclaringType(mainRefs);
     for (const g of groups) {
-      lines.push(formatRefGroup(g, implIndex));
+      lines.push(formatRefGroup(g, implIndex, viewScope));
     }
   }
 

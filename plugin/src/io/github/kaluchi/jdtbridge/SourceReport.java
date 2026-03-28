@@ -53,8 +53,14 @@ class SourceReport {
             return result.toString();
         }
 
-        // Method-level: resolve implementations, emit refs
+        // Method-level: resolve implementations + type subtypes
         ReferenceCollector.resolveImplementations(refs);
+        ReferenceCollector.resolveTypeSubtypes(refs);
+
+        // viewScope: lets CLI filter impls/subtypes by domain
+        result.addProperty("viewScope",
+                isProjectSource(member)
+                        ? "project" : "dependency");
 
         var refsArr = new JsonArray();
         for (var ref : refs.values()) {
@@ -120,10 +126,29 @@ class SourceReport {
                 }
             }
 
-            // Implementation of interface method
+            // Implementation of interface method or type
             if (ref.implementationOf() != null) {
                 entry.addProperty("implementationOf",
                         ref.implementationOf());
+            }
+
+            // Anonymous type: mark + resolve enclosing member
+            if (ref.kind() == ReferenceCollector.RefKind.TYPE
+                    && ref.element() instanceof IType t) {
+                try {
+                    if (t.isAnonymous()) {
+                        entry.addProperty("anonymous", true);
+                        var parent = t.getParent();
+                        if (parent instanceof IMethod m) {
+                            String encTypeFqn =
+                                    m.getDeclaringType()
+                                            .getFullyQualifiedName();
+                            entry.addProperty("enclosingFqmn",
+                                    encTypeFqn + "#"
+                                    + JdtUtils.compactSignature(m));
+                        }
+                    }
+                } catch (Exception e) { /* skip */ }
             }
 
             // Line range
@@ -142,18 +167,49 @@ class SourceReport {
             refsArr.add(entry);
         }
 
-        // Incoming refs (callers)
+        // Resolve implementations from hierarchy (SearchEngine
+        // REFERENCES search doesn't include override declarations)
+        var impls = collectImpls(member);
+        if (!impls.isEmpty()) {
+            var implArr = new JsonArray();
+            for (var e : impls.entrySet()) {
+                var entry = new JsonObject();
+                entry.addProperty("fqmn", e.getKey());
+                try {
+                    IType dt = e.getValue().getDeclaringType();
+                    if (dt != null && dt.isAnonymous()) {
+                        entry.addProperty("anonymous", true);
+                        var parent = dt.getParent();
+                        if (parent instanceof IMethod em) {
+                            entry.addProperty("enclosingFqmn",
+                                    em.getDeclaringType()
+                                            .getFullyQualifiedName()
+                                    + "#" + JdtUtils
+                                            .compactSignature(em));
+                        }
+                    }
+                } catch (Exception ex) { /* skip */ }
+                implArr.add(entry);
+            }
+            result.add("implementations", implArr);
+        }
+
+        // Incoming refs (callers) — exclude any that match
+        // an implementation FQMN (rare: impl also calls super)
         if (incomingRefs != null) {
             for (var inc : incomingRefs) {
+                if (impls.containsKey(inc.fqmn())) continue;
                 var entry = new JsonObject();
                 entry.addProperty("fqmn", inc.fqmn());
                 entry.addProperty("direction", "incoming");
                 entry.addProperty("kind", "method");
                 if (inc.typeKind() != null) {
-                    entry.addProperty("typeKind", inc.typeKind());
+                    entry.addProperty("typeKind",
+                            inc.typeKind());
                 }
-                entry.addProperty("scope", inc.isProjectSource()
-                        ? "project" : "dependency");
+                entry.addProperty("scope",
+                        inc.isProjectSource()
+                                ? "project" : "dependency");
                 if (inc.file() != null) {
                     entry.addProperty("file", inc.file());
                 }
@@ -167,6 +223,20 @@ class SourceReport {
         result.add("refs", refsArr);
 
         return result.toString();
+    }
+
+    /**
+     * Delegate to shared JdtUtils.findImplementations.
+     */
+    private static java.util.LinkedHashMap<String, IMethod>
+            collectImpls(IMember member) {
+        if (!(member instanceof IMethod method))
+            return new java.util.LinkedHashMap<>();
+        try {
+            return JdtUtils.findImplementations(method);
+        } catch (Exception e) {
+            return new java.util.LinkedHashMap<>();
+        }
     }
 
     // ---- Helpers ----
@@ -277,55 +347,62 @@ class SourceReport {
      * Add hierarchy info for type-level source: supertypes,
      * subtypes/implementors, enclosing type.
      */
-    private static void addHierarchy(JsonObject result, IType type) {
+    private static void addHierarchy(JsonObject result,
+            IType type) {
         try {
             ITypeHierarchy hierarchy =
                     type.newTypeHierarchy(null);
 
-            // Supertypes
+            // Supertypes — recursive up the chain
             var supers = new JsonArray();
-            IType superclass = hierarchy.getSuperclass(type);
-            if (superclass != null) {
-                String fqn = superclass.getFullyQualifiedName();
-                if (!"java.lang.Object".equals(fqn)) {
-                    var s = new JsonObject();
-                    s.addProperty("fqn", fqn);
-                    s.addProperty("kind",
-                            typeKindStr(superclass));
-                    supers.add(s);
-                }
-            }
-            for (IType iface
-                    : hierarchy.getSuperInterfaces(type)) {
-                var s = new JsonObject();
-                s.addProperty("fqn",
-                        iface.getFullyQualifiedName());
-                s.addProperty("kind", "interface");
-                supers.add(s);
-            }
+            addSupersRecursive(supers, hierarchy, type, 0);
             result.add("supertypes", supers);
 
+            // Subtypes — recursive down the tree
             var subs = new JsonArray();
-            for (IType sub : hierarchy.getSubtypes(type)) {
-                if (sub.isAnonymous()) continue;
-                var s = new JsonObject();
-                s.addProperty("fqn",
-                        sub.getFullyQualifiedName());
-                s.addProperty("kind", typeKindStr(sub));
-                subs.add(s);
-            }
+            addSubsRecursive(subs, hierarchy, type, 0);
             result.add("subtypes", subs);
 
             IType enclosing = type.getDeclaringType();
             if (enclosing != null) {
-                var enc = new JsonObject();
-                enc.addProperty("fqn",
-                        enclosing.getFullyQualifiedName());
-                enc.addProperty("kind",
-                        typeKindStr(enclosing));
-                result.add("enclosingType", enc);
+                result.add("enclosingType",
+                        hierEntry(enclosing));
             }
         } catch (Exception e) { /* ignore */ }
+    }
+
+    static void addSupersRecursive(JsonArray arr,
+            ITypeHierarchy h, IType type, int depth) {
+        // Direct interfaces (and recurse into their supers)
+        try {
+            for (IType iface : h.getSuperInterfaces(type)) {
+                var s = hierEntry(iface);
+                s.addProperty("depth", depth);
+                arr.add(s);
+                addSupersRecursive(arr, h, iface, depth + 1);
+            }
+        } catch (Exception e) { /* skip */ }
+        // Superclass chain
+        IType superclass = h.getSuperclass(type);
+        if (superclass == null) return;
+        String fqn;
+        try { fqn = superclass.getFullyQualifiedName(); }
+        catch (Exception e) { return; }
+        if ("java.lang.Object".equals(fqn)) return;
+        var s = hierEntry(superclass);
+        s.addProperty("depth", depth);
+        arr.add(s);
+        addSupersRecursive(arr, h, superclass, depth + 1);
+    }
+
+    static void addSubsRecursive(JsonArray arr,
+            ITypeHierarchy h, IType type, int depth) {
+        for (IType sub : h.getSubtypes(type)) {
+            var s = hierEntry(sub);
+            s.addProperty("depth", depth);
+            arr.add(s);
+            addSubsRecursive(arr, h, sub, depth + 1);
+        }
     }
 
     private static String typeKindStr(IType type) {
@@ -335,6 +412,37 @@ class SourceReport {
             if (type.isAnnotation()) return "annotation";
         } catch (Exception e) { /* ignore */ }
         return "class";
+    }
+
+    /**
+     * Build a hierarchy entry with full metadata: fqn, kind,
+     * file, line range, anonymous + enclosingFqmn.
+     */
+    static JsonObject hierEntry(IType t) {
+        var s = new JsonObject();
+        try {
+            s.addProperty("fqn", t.getFullyQualifiedName());
+            s.addProperty("kind", typeKindStr(t));
+            String path = absolutePath(t);
+            if (path != null) s.addProperty("file", path);
+            int[] lines = memberLines(t);
+            if (lines != null) {
+                s.addProperty("line", lines[0]);
+                s.addProperty("endLine", lines[1]);
+            }
+            if (t.isAnonymous()) {
+                s.addProperty("anonymous", true);
+                var parent = t.getParent();
+                if (parent instanceof IMethod m) {
+                    s.addProperty("enclosingFqmn",
+                            m.getDeclaringType()
+                                    .getFullyQualifiedName()
+                            + "#" + JdtUtils
+                                    .compactSignature(m));
+                }
+            }
+        } catch (Exception e) { /* skip */ }
+        return s;
     }
 
     private static String extractTypeFqn(String fqmn) {

@@ -414,7 +414,10 @@ public class RefCountContractTest {
         void animalSubtypesExactCount() throws Exception {
             var json = typeJson("test.model.Animal");
             var subs = json.getAsJsonArray("subtypes");
-            assertEquals(3, subs.size());
+            // Dog, Cat, AbstractPet, Parrot (under AbstractPet)
+            // + anonymous in AnonymousCallerService
+            // (recursive hierarchy now includes grandchildren)
+            assertEquals(5, subs.size());
         }
 
         @Test
@@ -426,9 +429,56 @@ public class RefCountContractTest {
                     .map(e -> e.getAsJsonObject()
                             .get("fqn").getAsString())
                     .collect(Collectors.toSet());
-            assertEquals(Set.of("test.model.Dog",
-                    "test.model.Cat",
-                    "test.edge.AbstractPet"), fqns);
+            assertTrue(fqns.contains("test.model.Dog"),
+                    "Dog: " + fqns);
+            assertTrue(fqns.contains("test.model.Cat"),
+                    "Cat: " + fqns);
+            assertTrue(fqns.contains("test.edge.AbstractPet"),
+                    "AbstractPet: " + fqns);
+            // Anonymous subtype from AnonymousCallerService
+            assertTrue(fqns.stream()
+                    .anyMatch(f -> f.contains("$")),
+                    "Anonymous: " + fqns);
+        }
+
+        @Test
+        void anonymousSubtypeHasMetadata() throws Exception {
+            var json = typeJson("test.model.Animal");
+            var subs = json.getAsJsonArray("subtypes");
+            for (var e : subs) {
+                var sub = e.getAsJsonObject();
+                if (sub.has("anonymous")
+                        && sub.get("anonymous").getAsBoolean()) {
+                    assertNotNull(str(sub, "enclosingFqmn"),
+                            "Anonymous should have enclosingFqmn");
+                    assertTrue(str(sub, "enclosingFqmn")
+                            .contains("createAnonymous"),
+                            "Enclosing: "
+                            + str(sub, "enclosingFqmn"));
+                    assertNotNull(str(sub, "file"),
+                            "Should have file path");
+                    assertTrue(sub.has("line"),
+                            "Should have line");
+                }
+            }
+        }
+
+        @Test
+        void namedSubtypeHasFileAndLines() throws Exception {
+            var json = typeJson("test.model.Animal");
+            var subs = json.getAsJsonArray("subtypes");
+            for (var e : subs) {
+                var sub = e.getAsJsonObject();
+                String fqn = str(sub, "fqn");
+                if ("test.model.Dog".equals(fqn)) {
+                    assertNotNull(str(sub, "file"),
+                            "Dog should have file");
+                    assertTrue(sub.has("line"),
+                            "Dog should have line");
+                    assertTrue(sub.has("endLine"),
+                            "Dog should have endLine");
+                }
+            }
         }
 
         @Test
@@ -497,6 +547,111 @@ public class RefCountContractTest {
         void topLevelNoEnclosingType() throws Exception {
             var json = typeJson("test.model.Dog");
             assertFalse(json.has("enclosingType"));
+        }
+
+        // ---- Type-level source includes imports ----
+
+        @Test
+        void topLevelSourceStartsAtLine1() throws Exception {
+            var json = typeJson("test.model.Dog");
+            assertEquals(1, json.get("startLine").getAsInt(),
+                    "Top-level type should start at line 1");
+        }
+
+        @Test
+        void topLevelSourceIncludesPackage() throws Exception {
+            var json = typeJson("test.model.Dog");
+            String source = json.get("source").getAsString();
+            assertTrue(source.startsWith("package test.model"),
+                    "Source should start with package: "
+                    + source.substring(0,
+                            Math.min(40, source.length())));
+        }
+
+        @Test
+        void topLevelSourceIncludesImports() throws Exception {
+            // Dog has no imports, use AnimalService which
+            // imports Animal and Dog
+            var json = typeJson(
+                    "test.service.AnimalService");
+            String source = json.get("source").getAsString();
+            assertTrue(source.contains("import test.model"),
+                    "Source should contain imports: "
+                    + source.substring(0,
+                            Math.min(100, source.length())));
+        }
+
+        @Test
+        void topLevelSourceIncludesClassBody()
+                throws Exception {
+            var json = typeJson("test.model.Dog");
+            String source = json.get("source").getAsString();
+            assertTrue(source.contains("class Dog"),
+                    "Source should contain class declaration");
+            assertTrue(source.contains("public String name()"),
+                    "Source should contain methods");
+        }
+
+        @Test
+        void methodLevelDoesNotStartAtLine1()
+                throws Exception {
+            var json = sourceJson(
+                    "test.service.AnimalService", "process");
+            assertTrue(
+                    json.get("startLine").getAsInt() > 1,
+                    "Method should not start at line 1");
+        }
+
+        // ---- REGRESSION: inner class must NOT start at 1 ----
+
+        @Test
+        void innerClassDoesNotStartAtLine1()
+                throws Exception {
+            // Outer.Inner is an inner class — should NOT
+            // include Outer's package/imports/body
+            var json = typeJson("test.edge.Outer.Inner");
+            assertTrue(
+                    json.get("startLine").getAsInt() > 1,
+                    "Inner class should not start at line 1: "
+                    + json.get("startLine"));
+        }
+
+        @Test
+        void innerClassSourceDoesNotContainPackage()
+                throws Exception {
+            var json = typeJson("test.edge.Outer.Inner");
+            String source = json.get("source").getAsString();
+            assertFalse(source.contains("package test"),
+                    "Inner class source should not have "
+                    + "package declaration");
+        }
+
+        @Test
+        void staticNestedDoesNotStartAtLine1()
+                throws Exception {
+            var json = typeJson(
+                    "test.edge.Outer.StaticNested");
+            assertTrue(
+                    json.get("startLine").getAsInt() > 1,
+                    "Static nested should not start at 1: "
+                    + json.get("startLine"));
+        }
+
+        @Test
+        void enumStillStartsAtLine1() throws Exception {
+            // Color is a top-level enum — should start at 1
+            var json = typeJson("test.edge.Color");
+            assertEquals(1,
+                    json.get("startLine").getAsInt(),
+                    "Top-level enum should start at line 1");
+        }
+
+        @Test
+        void interfaceStillStartsAtLine1() throws Exception {
+            var json = typeJson("test.model.Animal");
+            assertEquals(1,
+                    json.get("startLine").getAsInt(),
+                    "Top-level interface should start at 1");
         }
     }
 
