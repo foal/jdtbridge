@@ -125,7 +125,7 @@ Most commands have short aliases for quick typing.
 | `rename <FQMN> <new>` | | Alt+Shift+R | Rename type, method, or field across workspace |
 | `move <FQN> <package>` | | Alt+Shift+V | Move type to another package |
 | `open <FQMN>` | | F3 | Open in Eclipse editor |
-| `editors` | `ed` | | List all open editors (absolute paths) |
+| `editors` | `ed` | Ctrl+E | List all open editors (absolute paths) |
 | `launch list` | | | List launches (running + terminated) |
 | `launch configs` | | | List saved launch configurations (MRU order) |
 | `launch run <config> [-f] [-q]` | | | Launch a configuration (`-f` to stream) |
