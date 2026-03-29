@@ -104,36 +104,36 @@ MCP is the right choice for things like database connections, OAuth flows, or cl
 
 Most commands have short aliases for quick typing.
 
-| Command | Alias | What it does |
-|---------|-------|-------------|
-| `projects` | | List workspace projects |
-| `project-info <name>` | `pi` | Project overview (packages, types, methods) |
-| `find <Name\|package>` | | Find types by name, wildcard, or package |
-| `references <FQMN>` | `refs` | All references to a type, method, or field |
-| `subtypes <FQN>` | `subt` | All subtypes and implementors |
-| `hierarchy <FQN>` | `hier` | Full type hierarchy (supers + subs) |
-| `implementors <FQMN>` | `impl` | Implementations of an interface method |
-| `type-info <FQN>` | `ti` | Class overview (fields, methods, signatures) |
-| `source <FQMN>` | `src` | Source code + resolved references (hypertext navigation) |
-| `build [--project <name>]` | `b` | Build project (incremental or clean) |
-| `test run <FQN> [-f]` | | Run JUnit tests with progress streaming |
-| `errors [--project <name>]` | `err` | Compilation errors and diagnostics |
-| `refresh [<file>] [--project <name>]` | `r` | Manually notify Eclipse of file changes |
-| `maven update [--project <name>]` | | Update Maven project (Alt+F5 equivalent) |
-| `organize-imports <file>` | `oi` | Organize imports (Eclipse settings) |
-| `format <file>` | `fmt` | Format code (Eclipse settings) |
-| `rename <FQMN> <new>` | | Rename type, method, or field across workspace |
-| `move <FQN> <package>` | | Move type to another package |
-| `open <FQMN>` | | Open in Eclipse editor |
-| `editors` | `ed` | List all open editors (absolute paths) |
-| `launch list` | | List launches (running + terminated) |
-| `launch configs` | | List saved launch configurations (MRU order) |
-| `launch run <config> [-f] [-q]` | | Launch a configuration (`-f` to stream) |
-| `launch debug <config> [-f] [-q]` | | Launch in debug mode |
-| `launch logs <name> [-f]` | | Show console output (`-f` to stream) |
-| `launch stop <name>` | | Stop a running launch |
-| `launch clear [name]` | | Remove terminated launches |
-| `setup [--check\|--remove]` | | Install, check, or remove Eclipse plugin |
+| Command | Alias | Eclipse | What it does |
+|---------|-------|---------|-------------|
+| `projects` | | | List workspace projects |
+| `project-info <name>` | `pi` | | Project overview (packages, types, methods) |
+| `find <Name\|package>` | | Ctrl+Shift+T | Find types by name, wildcard, or package |
+| `references <FQMN>` | `refs` | Ctrl+Shift+G | All references to a type, method, or field |
+| `subtypes <FQN>` | `subt` | F4 | All subtypes and implementors |
+| `hierarchy <FQN>` | `hier` | F4 | Full type hierarchy (supers + subs) |
+| `implementors <FQMN>` | `impl` | | Implementations of an interface method |
+| `type-info <FQN>` | `ti` | | Class overview (fields, methods, signatures) |
+| `source <FQMN>` | `src` | F3 | Source code + resolved references (hypertext navigation) |
+| `build [--project <name>]` | `b` | Ctrl+B | Build project (incremental or clean) |
+| `test run <FQN> [-f]` | | | Run JUnit tests with progress streaming |
+| `errors [--project <name>]` | `err` | | Compilation errors and diagnostics |
+| `refresh [<file>] [--project <name>]` | `r` | F5 | Manually notify Eclipse of file changes |
+| `maven update [--project <name>]` | | Alt+F5 | Update Maven project |
+| `organize-imports <file>` | `oi` | Ctrl+Shift+O | Organize imports (Eclipse settings) |
+| `format <file>` | `fmt` | Ctrl+Shift+F | Format code (Eclipse settings) |
+| `rename <FQMN> <new>` | | Alt+Shift+R | Rename type, method, or field across workspace |
+| `move <FQN> <package>` | | Alt+Shift+V | Move type to another package |
+| `open <FQMN>` | | F3 | Open in Eclipse editor |
+| `editors` | `ed` | | List all open editors (absolute paths) |
+| `launch list` | | | List launches (running + terminated) |
+| `launch configs` | | | List saved launch configurations (MRU order) |
+| `launch run <config> [-f] [-q]` | | | Launch a configuration (`-f` to stream) |
+| `launch debug <config> [-f] [-q]` | | F11 | Launch in debug mode |
+| `launch logs <name> [-f]` | | | Show console output (`-f` to stream) |
+| `launch stop <name>` | | Ctrl+F2 | Stop a running launch |
+| `launch clear [name]` | | | Remove terminated launches |
+| `setup [--check\|--remove]` | | | Install, check, or remove Eclipse plugin |
 
 Run `jdt help <command>` for detailed flags and options.
 
