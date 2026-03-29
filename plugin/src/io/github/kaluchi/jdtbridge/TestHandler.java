@@ -123,6 +123,8 @@ class TestHandler {
 
         String prefix = fqn != null && !fqn.isBlank()
                 ? fqn.substring(fqn.lastIndexOf('.') + 1)
+                : packageName != null && !packageName.isBlank()
+                ? packageName
                 : projectName != null && !projectName.isBlank()
                 ? projectName
                 : "test";
