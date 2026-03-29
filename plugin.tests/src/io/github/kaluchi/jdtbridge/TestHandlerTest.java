@@ -236,6 +236,64 @@ public class TestHandlerTest {
         assertEquals(120, invokeParseTimeout("abc", 120));
     }
 
+    // ---- launchPrefix ----
+
+    @Test
+    public void prefixFromFqn() {
+        assertEquals("OrderServiceTest",
+                TestHandler.launchPrefix(
+                        "com.example.OrderServiceTest",
+                        null, null));
+    }
+
+    @Test
+    public void prefixFromFqnSimpleName() {
+        assertEquals("MyTest",
+                TestHandler.launchPrefix("MyTest", null, null));
+    }
+
+    @Test
+    public void prefixFromPackage() {
+        assertEquals("com.example.service",
+                TestHandler.launchPrefix(
+                        null, "com.example.service", "m8-server"));
+    }
+
+    @Test
+    public void prefixFromProject() {
+        assertEquals("m8-server",
+                TestHandler.launchPrefix(null, null, "m8-server"));
+    }
+
+    @Test
+    public void prefixFallback() {
+        assertEquals("test",
+                TestHandler.launchPrefix(null, null, null));
+    }
+
+    @Test
+    public void prefixFqnTakesPriority() {
+        assertEquals("MyTest",
+                TestHandler.launchPrefix(
+                        "com.example.MyTest",
+                        "com.example",
+                        "m8-server"));
+    }
+
+    @Test
+    public void prefixPackageOverProject() {
+        assertEquals("com.example",
+                TestHandler.launchPrefix(
+                        null, "com.example", "m8-server"));
+    }
+
+    @Test
+    public void prefixBlankFqnFallsToPackage() {
+        assertEquals("com.example",
+                TestHandler.launchPrefix(
+                        "  ", "com.example", "m8-server"));
+    }
+
     // ---- Helpers ----
 
     private int invokeParseTimeout(String s, int defaultVal) {

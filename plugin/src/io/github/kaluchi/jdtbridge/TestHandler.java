@@ -121,14 +121,8 @@ class TestHandler {
             return null;
         }
 
-        String prefix = fqn != null && !fqn.isBlank()
-                ? fqn.substring(fqn.lastIndexOf('.') + 1)
-                : packageName != null && !packageName.isBlank()
-                ? packageName
-                : projectName != null && !projectName.isBlank()
-                ? projectName
-                : "test";
-        String configName = prefix + "-"
+        String configName = launchPrefix(
+                fqn, packageName, projectName) + "-"
                 + System.currentTimeMillis();
         ILaunchConfigurationWorkingCopy wc =
                 launchType.newInstance(null, configName);
@@ -542,6 +536,17 @@ class TestHandler {
             }
         }
         return null;
+    }
+
+    static String launchPrefix(String fqn, String packageName,
+            String projectName) {
+        if (fqn != null && !fqn.isBlank())
+            return fqn.substring(fqn.lastIndexOf('.') + 1);
+        if (packageName != null && !packageName.isBlank())
+            return packageName;
+        if (projectName != null && !projectName.isBlank())
+            return projectName;
+        return "test";
     }
 
     int parseTimeout(String s, int defaultVal) {
