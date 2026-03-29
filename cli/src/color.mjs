@@ -2,7 +2,9 @@
 // Enable: --color flag, JDTBRIDGE_COLOR=1, or FORCE_COLOR=1
 // Disable: --no-color flag, NO_COLOR=1
 
-import pc from "picocolors";
+import { createColors } from "picocolors";
+
+const forced = createColors(true);
 
 let _enabled;
 
@@ -33,8 +35,8 @@ function wrap(fn) {
   return (s) => (isColorEnabled() ? fn(s) : s);
 }
 
-export const red = wrap(pc.red);
-export const green = wrap(pc.green);
-export const yellow = wrap(pc.yellow);
-export const bold = wrap(pc.bold);
-export const dim = wrap(pc.dim);
+export const red = wrap(forced.red);
+export const green = wrap(forced.green);
+export const yellow = wrap(forced.yellow);
+export const bold = wrap(forced.bold);
+export const dim = wrap(forced.dim);

@@ -12,9 +12,9 @@ let _instance;
  * @param {string} [workspaceHint]
  * @returns {import('./discovery.mjs').Instance}
  */
-export function connect(workspaceHint) {
+export async function connect(workspaceHint) {
   if (_instance) return _instance;
-  _instance = findInstance(workspaceHint);
+  _instance = await findInstance(workspaceHint);
   if (!_instance) {
     console.error(
       bold(red("Eclipse JDT Bridge not running.")) +
@@ -67,12 +67,12 @@ function parseJson(data) {
  * @param {number} [timeoutMs=10000]
  * @returns {Promise<any>}
  */
-export function get(path, timeoutMs = 10_000) {
-  const inst = connect();
+export async function get(path, timeoutMs = 10_000) {
+  const inst = await connect();
   return new Promise((resolve, reject) => {
     const req = request(
       {
-        hostname: "127.0.0.1",
+        hostname: inst.host,
         port: inst.port,
         path,
         method: "GET",
@@ -111,12 +111,12 @@ export function get(path, timeoutMs = 10_000) {
  * @param {number} [timeoutMs=10000]
  * @returns {Promise<{headers: object, body: string}>}
  */
-export function getRaw(path, timeoutMs = 10_000) {
-  const inst = connect();
+export async function getRaw(path, timeoutMs = 10_000) {
+  const inst = await connect();
   return new Promise((resolve, reject) => {
     const req = request(
       {
-        hostname: "127.0.0.1",
+        hostname: inst.host,
         port: inst.port,
         path,
         method: "GET",
@@ -167,12 +167,12 @@ export function getRaw(path, timeoutMs = 10_000) {
  * @param {import('stream').Writable} dest
  * @returns {Promise<void>}
  */
-export function getStream(path, dest) {
-  const inst = connect();
+export async function getStream(path, dest) {
+  const inst = await connect();
   return new Promise((resolve, reject) => {
     const req = request(
       {
-        hostname: "127.0.0.1",
+        hostname: inst.host,
         port: inst.port,
         path,
         method: "GET",
@@ -205,12 +205,12 @@ export function getStream(path, dest) {
  * @param {(line: string) => void} onLine
  * @returns {Promise<void>}
  */
-export function getStreamLines(path, onLine) {
-  const inst = connect();
+export async function getStreamLines(path, onLine) {
+  const inst = await connect();
   return new Promise((resolve, reject) => {
     const req = request(
       {
-        hostname: "127.0.0.1",
+        hostname: inst.host,
         port: inst.port,
         path,
         method: "GET",

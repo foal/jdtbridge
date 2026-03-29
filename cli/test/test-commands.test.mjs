@@ -50,9 +50,8 @@ describe("test commands", () => {
   async function setupMock(handler) {
     ({ server, port } = await startServer(handler));
     vi.doMock("../src/discovery.mjs", () => ({
-      discoverInstances: () => [],
-      findInstance: () => ({ port, token: null, pid: process.pid, workspace: "/test" }),
-      isPidAlive: () => true,
+      discoverInstances: async () => [],
+      findInstance: async () => ({ port, token: null, pid: process.pid, workspace: "/test", host: "127.0.0.1" }),
     }));
   }
 

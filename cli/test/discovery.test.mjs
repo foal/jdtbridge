@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { createServer } from "node:http";
 import {
   mkdtempSync,
   mkdirSync,
@@ -10,13 +11,13 @@ import { resetHome } from "../src/home.mjs";
 import {
   discoverInstances,
   findInstance,
-  isPidAlive,
 } from "../src/discovery.mjs";
 
 describe("discovery", () => {
   let testDir;
   let instDir;
   let origEnv;
+  let servers = [];
 
   beforeEach(() => {
     testDir = mkdtempSync(join(tmpdir(), "jdtbridge-disc-"));
@@ -27,161 +28,195 @@ describe("discovery", () => {
     resetHome();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (origEnv !== undefined) {
       process.env.JDTBRIDGE_HOME = origEnv;
     } else {
       delete process.env.JDTBRIDGE_HOME;
     }
     resetHome();
+    for (const s of servers) {
+      await new Promise((r) => s.close(r));
+    }
+    servers = [];
   });
+
+  /** Start a mock HTTP server, return its port. */
+  async function startMock() {
+    const srv = createServer((req, res) => {
+      res.writeHead(200);
+      res.end("ok");
+    });
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    servers.push(srv);
+    return srv.address().port;
+  }
 
   function writeInstance(name, data) {
     writeFileSync(join(instDir, name), JSON.stringify(data));
   }
 
-  describe("isPidAlive", () => {
-    it("returns true for current process", () => {
-      expect(isPidAlive(process.pid)).toBe(true);
-    });
-
-    it("returns false for non-existent PID", () => {
-      // PID 99999999 is extremely unlikely to exist
-      expect(isPidAlive(99999999)).toBe(false);
-    });
-  });
-
   describe("discoverInstances", () => {
-    it("returns empty array when no instances", () => {
-      expect(discoverInstances()).toEqual([]);
+    it("returns empty array when no instances", async () => {
+      expect(await discoverInstances()).toEqual([]);
     });
 
-    it("reads valid instance file with alive PID", () => {
+    it("returns instance when bridge responds", async () => {
+      const port = await startMock();
       writeInstance("abc123.json", {
-        port: 7891,
+        port,
         token: "tok",
         pid: process.pid,
         workspace: "D:/ws",
       });
-      const instances = discoverInstances();
+      const instances = await discoverInstances();
       expect(instances).toHaveLength(1);
-      expect(instances[0].port).toBe(7891);
+      expect(instances[0].port).toBe(port);
       expect(instances[0].token).toBe("tok");
       expect(instances[0].workspace).toBe("D:/ws");
       expect(instances[0].file).toContain("abc123.json");
     });
 
-    it("filters out instances with dead PID", () => {
+    it("filters out instances where bridge is not responding", async () => {
       writeInstance("dead.json", {
-        port: 7891,
+        port: 19999, // nothing listening
         token: "tok",
         pid: 99999999,
         workspace: "D:/ws",
       });
-      expect(discoverInstances()).toEqual([]);
+      expect(await discoverInstances()).toEqual([]);
     });
 
-    it("skips files without port", () => {
+    it("skips files without port", async () => {
       writeInstance("noport.json", {
         token: "tok",
         pid: process.pid,
         workspace: "D:/ws",
       });
-      expect(discoverInstances()).toEqual([]);
+      expect(await discoverInstances()).toEqual([]);
     });
 
-    it("skips files without pid", () => {
-      writeInstance("nopid.json", {
-        port: 7891,
-        token: "tok",
-        workspace: "D:/ws",
-      });
-      expect(discoverInstances()).toEqual([]);
-    });
-
-    it("skips corrupt JSON files", () => {
+    it("skips corrupt JSON files", async () => {
       writeFileSync(join(instDir, "corrupt.json"), "{broken json");
-      expect(discoverInstances()).toEqual([]);
+      expect(await discoverInstances()).toEqual([]);
     });
 
-    it("ignores non-.json files", () => {
+    it("ignores non-.json files", async () => {
       writeFileSync(join(instDir, "readme.txt"), "not an instance");
-      expect(discoverInstances()).toEqual([]);
+      expect(await discoverInstances()).toEqual([]);
     });
 
-    it("returns multiple live instances", () => {
-      writeInstance("a.json", { port: 1001, token: "t1", pid: process.pid, workspace: "/ws/a" });
-      writeInstance("b.json", { port: 1002, token: "t2", pid: process.pid, workspace: "/ws/b" });
-      const instances = discoverInstances();
+    it("returns multiple live instances", async () => {
+      const p1 = await startMock();
+      const p2 = await startMock();
+      writeInstance("a.json", { port: p1, token: "t1", pid: process.pid, workspace: "/ws/a" });
+      writeInstance("b.json", { port: p2, token: "t2", pid: process.pid, workspace: "/ws/b" });
+      const instances = await discoverInstances();
       expect(instances).toHaveLength(2);
     });
 
-    it("passes through version and location fields", () => {
+    it("passes through version and location fields", async () => {
+      const port = await startMock();
       writeInstance("v.json", {
-        port: 7891, token: "t", pid: process.pid, workspace: "/ws",
+        port, token: "t", pid: process.pid, workspace: "/ws",
         version: "1.0.0.202603181541",
         location: "reference:file:plugins/io.github.kaluchi.jdtbridge_1.0.0.jar",
       });
-      const instances = discoverInstances();
+      const instances = await discoverInstances();
       expect(instances).toHaveLength(1);
       expect(instances[0].version).toBe("1.0.0.202603181541");
       expect(instances[0].location).toBe("reference:file:plugins/io.github.kaluchi.jdtbridge_1.0.0.jar");
     });
 
-    it("works without version and location (backwards compat)", () => {
+    it("works without version and location (backwards compat)", async () => {
+      const port = await startMock();
       writeInstance("old.json", {
-        port: 7891, token: "t", pid: process.pid, workspace: "/ws",
+        port, token: "t", pid: process.pid, workspace: "/ws",
       });
-      const instances = discoverInstances();
+      const instances = await discoverInstances();
       expect(instances).toHaveLength(1);
       expect(instances[0].version).toBeUndefined();
       expect(instances[0].location).toBeUndefined();
     });
+
+    it("uses JDT_BRIDGE_HOST env var", async () => {
+      const port = await startMock();
+      process.env.JDT_BRIDGE_HOST = "127.0.0.1";
+      writeInstance("remote.json", {
+        port, token: "t", pid: 1, workspace: "/ws",
+      });
+      const instances = await discoverInstances();
+      expect(instances).toHaveLength(1);
+      expect(instances[0].host).toBe("127.0.0.1");
+      delete process.env.JDT_BRIDGE_HOST;
+    });
+
+    it("uses host field from instance file", async () => {
+      const port = await startMock();
+      writeInstance("hosted.json", {
+        port, token: "t", pid: 1, workspace: "/ws",
+        host: "127.0.0.1",
+      });
+      const instances = await discoverInstances();
+      expect(instances).toHaveLength(1);
+      expect(instances[0].host).toBe("127.0.0.1");
+    });
   });
 
   describe("findInstance", () => {
-    it("returns null when no instances", () => {
-      expect(findInstance()).toBeNull();
+    it("returns null when no instances", async () => {
+      expect(await findInstance()).toBeNull();
     });
 
-    it("returns single instance without hint", () => {
-      writeInstance("only.json", { port: 7891, token: "t", pid: process.pid, workspace: "/ws/main" });
-      const inst = findInstance();
-      expect(inst.port).toBe(7891);
+    it("returns single instance without hint", async () => {
+      const port = await startMock();
+      writeInstance("only.json", { port, token: "t", pid: process.pid, workspace: "/ws/main" });
+      const inst = await findInstance();
+      expect(inst.port).toBe(port);
     });
 
-    it("matches workspace hint", () => {
-      writeInstance("a.json", { port: 1001, token: "t1", pid: process.pid, workspace: "/ws/alpha" });
-      writeInstance("b.json", { port: 1002, token: "t2", pid: process.pid, workspace: "/ws/beta" });
-      const inst = findInstance("beta");
-      expect(inst.port).toBe(1002);
+    it("matches workspace hint", async () => {
+      const p1 = await startMock();
+      const p2 = await startMock();
+      writeInstance("a.json", { port: p1, token: "t1", pid: process.pid, workspace: "/ws/alpha" });
+      writeInstance("b.json", { port: p2, token: "t2", pid: process.pid, workspace: "/ws/beta" });
+      const inst = await findInstance("beta");
+      expect(inst.port).toBe(p2);
     });
 
-    it("matches workspace hint case-insensitively", () => {
-      writeInstance("a.json", { port: 1001, token: "t1", pid: process.pid, workspace: "/ws/MyProject" });
-      writeInstance("b.json", { port: 1002, token: "t2", pid: process.pid, workspace: "/ws/other" });
-      const inst = findInstance("myproject");
-      expect(inst.port).toBe(1001);
+    it("matches workspace hint case-insensitively", async () => {
+      const p1 = await startMock();
+      const p2 = await startMock();
+      writeInstance("a.json", { port: p1, token: "t1", pid: process.pid, workspace: "/ws/MyProject" });
+      writeInstance("b.json", { port: p2, token: "t2", pid: process.pid, workspace: "/ws/other" });
+      const inst = await findInstance("myproject");
+      expect(inst.port).toBe(p1);
     });
 
-    it("normalizes backslashes in hint", () => {
-      writeInstance("a.json", { port: 1001, token: "t1", pid: process.pid, workspace: "D:/ws/proj" });
-      writeInstance("b.json", { port: 1002, token: "t2", pid: process.pid, workspace: "D:/ws/other" });
-      const inst = findInstance("D:\\ws\\proj");
-      expect(inst.port).toBe(1001);
+    it("normalizes backslashes in hint", async () => {
+      const p1 = await startMock();
+      const p2 = await startMock();
+      writeInstance("a.json", { port: p1, token: "t1", pid: process.pid, workspace: "D:/ws/proj" });
+      writeInstance("b.json", { port: p2, token: "t2", pid: process.pid, workspace: "D:/ws/other" });
+      const inst = await findInstance("D:\\ws\\proj");
+      expect(inst.port).toBe(p1);
     });
 
-    it("falls back to first when hint doesn't match", () => {
-      writeInstance("a.json", { port: 1001, token: "t1", pid: process.pid, workspace: "/ws/alpha" });
-      writeInstance("b.json", { port: 1002, token: "t2", pid: process.pid, workspace: "/ws/beta" });
-      const inst = findInstance("nonexistent");
+    it("falls back to first when hint doesn't match", async () => {
+      const p1 = await startMock();
+      const p2 = await startMock();
+      writeInstance("a.json", { port: p1, token: "t1", pid: process.pid, workspace: "/ws/alpha" });
+      writeInstance("b.json", { port: p2, token: "t2", pid: process.pid, workspace: "/ws/beta" });
+      const inst = await findInstance("nonexistent");
       expect(inst).not.toBeNull();
     });
 
-    it("falls back to first when no hint given with multiple instances", () => {
-      writeInstance("a.json", { port: 1001, token: "t1", pid: process.pid, workspace: "/ws/alpha" });
-      writeInstance("b.json", { port: 1002, token: "t2", pid: process.pid, workspace: "/ws/beta" });
-      const inst = findInstance();
+    it("falls back to first when no hint given with multiple instances", async () => {
+      const p1 = await startMock();
+      const p2 = await startMock();
+      writeInstance("a.json", { port: p1, token: "t1", pid: process.pid, workspace: "/ws/alpha" });
+      writeInstance("b.json", { port: p2, token: "t2", pid: process.pid, workspace: "/ws/beta" });
+      const inst = await findInstance();
       expect(inst).not.toBeNull();
     });
   });

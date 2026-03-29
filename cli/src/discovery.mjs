@@ -1,7 +1,8 @@
-// Eclipse instance discovery — find running instances via bridge files and process list.
+// Eclipse instance discovery — find running instances via bridge files and HTTP probe.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { request } from "node:http";
 import { instancesDir } from "./home.mjs";
 
 /**
@@ -10,17 +11,18 @@ import { instancesDir } from "./home.mjs";
  * @property {string} token
  * @property {number} pid
  * @property {string} workspace
- * @property {string} [version] - plugin version (added in 1.1)
- * @property {string} [location] - bundle location URI
+ * @property {string} [version]
+ * @property {string} [location]
+ * @property {string} host - bridge host (default 127.0.0.1)
  * @property {string} file - path to the instance file
  */
 
 /**
- * Read all instance files from JDTBRIDGE_HOME/instances/.
- * Filters out stale instances (PID not alive).
- * @returns {Instance[]}
+ * Read all instance files and probe each via HTTP.
+ * Supports JDT_BRIDGE_HOST env var and host field in instance JSON.
+ * @returns {Promise<Instance[]>}
  */
-export function discoverInstances() {
+export async function discoverInstances() {
   const dir = instancesDir();
   let files;
   try {
@@ -29,30 +31,33 @@ export function discoverInstances() {
     return [];
   }
 
-  const instances = [];
+  const envHost = process.env.JDT_BRIDGE_HOST;
+  const candidates = [];
   for (const file of files) {
     const filePath = join(dir, file);
     try {
       const data = JSON.parse(readFileSync(filePath, "utf8"));
-      if (!data.port || !data.pid) continue;
-      if (!isPidAlive(data.pid)) continue;
-      instances.push({ ...data, file: filePath });
+      if (!data.port) continue;
+      const host = envHost || data.host || "127.0.0.1";
+      candidates.push({ ...data, host, file: filePath });
     } catch {
       // corrupt file — skip
     }
   }
-  return instances;
+
+  const results = await Promise.all(
+    candidates.map((inst) => probe(inst).then(() => inst).catch(() => null)),
+  );
+  return results.filter(Boolean);
 }
 
 /**
- * Find a single instance. If multiple are running, prefer one matching
- * the given workspace hint (cwd or explicit). If none match, return the
- * first one found (or null).
- * @param {string} [workspaceHint] - substring to match against workspace path
- * @returns {Instance|null}
+ * Find a single instance.
+ * @param {string} [workspaceHint]
+ * @returns {Promise<Instance|null>}
  */
-export function findInstance(workspaceHint) {
-  const instances = discoverInstances();
+export async function findInstance(workspaceHint) {
+  const instances = await discoverInstances();
   if (instances.length === 0) return null;
   if (instances.length === 1) return instances[0];
 
@@ -64,19 +69,27 @@ export function findInstance(workspaceHint) {
     if (match) return match;
   }
 
-  // Default to first
   return instances[0];
 }
 
 /**
- * Check if a PID is still alive.
- * Sends signal 0 which checks existence without killing.
+ * HTTP probe — check if bridge is alive on host:port.
  */
-export function isPidAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+function probe(inst) {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      { hostname: inst.host, port: inst.port, path: "/status", method: "GET", timeout: 2000 },
+      (res) => {
+        res.resume();
+        resolve();
+      },
+    );
+    req.on("error", reject);
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("timeout"));
+    });
+    req.end();
+  });
 }
+

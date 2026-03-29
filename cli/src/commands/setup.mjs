@@ -149,7 +149,7 @@ async function runCheck(config) {
 
   console.log();
   console.log(bold("Bridge"));
-  const instances = discoverInstances();
+  const instances = await discoverInstances();
   if (instances.length > 0) {
     for (const inst of instances) {
       ok(`port ${inst.port}, PID ${inst.pid}, workspace ${inst.workspace}`);
@@ -174,9 +174,13 @@ async function runCheck(config) {
   // Claude Code hooks
   console.log(bold("Claude Code"));
   try {
-    const cwd = process.cwd();
+    if (!repoRoot) {
+      info("Repo not found — cannot check Claude Code settings");
+      console.log();
+      return;
+    }
     // Check settings.local.json for hooks
-    const localPath = join(cwd, ".claude", "settings.local.json");
+    const localPath = join(repoRoot, ".claude", "settings.local.json");
     if (existsSync(localPath)) {
       const settings = JSON.parse(readFileSync(localPath, "utf8"));
       const hasPre = settings.hooks?.PreToolUse?.some(
@@ -193,7 +197,7 @@ async function runCheck(config) {
       info("No .claude/settings.local.json — run: jdt setup --claude");
     }
     // Check agents
-    const agentsDir = join(cwd, ".claude", "agents");
+    const agentsDir = join(repoRoot, ".claude", "agents");
     const hasExplore = existsSync(join(agentsDir, "Explore.md"));
     const hasPlan = existsSync(join(agentsDir, "Plan.md"));
     (hasExplore ? ok : info)(`Explore agent: ${hasExplore ? "installed" : "not installed"}`);
@@ -284,11 +288,11 @@ async function runInstall(config, flags) {
   ok("Plugin built");
 
   // Capture workspace BEFORE stopping Eclipse (instances are filtered by
-  // isPidAlive, so after stop they disappear from discoverInstances).
+  // HTTP probe fails after stop, so they disappear from discoverInstances).
   const wasRunning = isEclipseRunning();
   let workspace = null;
   if (wasRunning) {
-    const instances = discoverInstances();
+    const instances = await discoverInstances();
     if (instances.length > 0) workspace = instances[0].workspace;
   }
 

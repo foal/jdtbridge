@@ -16,14 +16,14 @@ function stopServer(server) {
 
 function mockDiscovery(port, token = null) {
   vi.doMock("../src/discovery.mjs", () => ({
-    discoverInstances: () => [],
-    findInstance: () => ({
+    discoverInstances: async () => [],
+    findInstance: async () => ({
       port,
       token,
       pid: process.pid,
       workspace: "/test",
+      host: "127.0.0.1",
     }),
-    isPidAlive: () => true,
   }));
 }
 
@@ -307,9 +307,8 @@ describe("client", () => {
 
   it("connect() exits when no instance found", async () => {
     vi.doMock("../src/discovery.mjs", () => ({
-      discoverInstances: () => [],
-      findInstance: () => null,
-      isPidAlive: () => false,
+      discoverInstances: async () => [],
+      findInstance: async () => null,
     }));
     const origExit = process.exit;
     const origError = console.error;
@@ -324,7 +323,7 @@ describe("client", () => {
     };
     try {
       const { connect } = await import("../src/client.mjs");
-      connect();
+      await connect();
     } catch {
       // expected
     }
