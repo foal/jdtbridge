@@ -161,6 +161,29 @@ describe("discovery", () => {
       expect(instances).toHaveLength(1);
       expect(instances[0].host).toBe("127.0.0.1");
     });
+
+    it("remote instance probed like local", async () => {
+      // Remote host with mock server — probe works
+      const port = await startMock();
+      writeInstance("remote.json", {
+        port, token: "t", pid: 1, workspace: "/ws",
+        host: "127.0.0.1", // use localhost so mock server works
+      });
+      const instances = await discoverInstances();
+      expect(instances).toHaveLength(1);
+    });
+
+    it("filters dead instances regardless of host", async () => {
+      writeInstance("dead-local.json", {
+        port: 19999, token: "t1", pid: 1, workspace: "/ws/dead",
+      });
+      writeInstance("dead-remote.json", {
+        port: 19998, token: "t2", pid: 1, workspace: "/ws/remote",
+        host: "192.168.1.100",
+      });
+      const instances = await discoverInstances();
+      expect(instances).toHaveLength(0);
+    });
   });
 
   describe("findInstance", () => {

@@ -333,6 +333,48 @@ describe("client", () => {
     expect(errorMsg).toContain("not running");
   });
 
+  // --- requestOptions() ---
+
+  it("requestOptions direct when no proxy", async () => {
+    vi.resetModules();
+    delete process.env.http_proxy;
+    delete process.env.HTTP_PROXY;
+    const { proxyAwareOptions } = await import("../src/proxy.mjs");
+    const opts = proxyAwareOptions(
+      "host.docker.internal", 61180, "/projects", "GET", 10000);
+    expect(opts.hostname).toBe("host.docker.internal");
+    expect(opts.port).toBe(61180);
+    expect(opts.path).toBe("/projects");
+  });
+
+  it("requestOptions routes through proxy when http_proxy set", async () => {
+    vi.resetModules();
+    process.env.http_proxy = "http://proxy.local:3128";
+    process.env.no_proxy = "localhost,127.0.0.1";
+    const { proxyAwareOptions } = await import("../src/proxy.mjs");
+    const opts = proxyAwareOptions(
+      "host.docker.internal", 61180, "/projects", "GET", 10000);
+    expect(opts.hostname).toBe("proxy.local");
+    expect(opts.port).toBe(3128);
+    expect(opts.path).toBe("http://host.docker.internal:61180/projects");
+    delete process.env.http_proxy;
+    delete process.env.no_proxy;
+  });
+
+  it("requestOptions skips proxy when host in no_proxy", async () => {
+    vi.resetModules();
+    process.env.http_proxy = "http://proxy.local:3128";
+    process.env.no_proxy = "localhost,127.0.0.1,host.docker.internal";
+    const { proxyAwareOptions } = await import("../src/proxy.mjs");
+    const opts = proxyAwareOptions(
+      "host.docker.internal", 61180, "/projects", "GET", 10000);
+    expect(opts.hostname).toBe("host.docker.internal");
+    expect(opts.port).toBe(61180);
+    expect(opts.path).toBe("/projects");
+    delete process.env.http_proxy;
+    delete process.env.no_proxy;
+  });
+
   // --- resetClient() ---
 
   it("resetClient() clears cached instance", async () => {

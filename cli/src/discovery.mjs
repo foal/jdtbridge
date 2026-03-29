@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { request } from "node:http";
 import { instancesDir } from "./home.mjs";
+import { proxyAwareOptions } from "./proxy.mjs";
 
 /**
  * @typedef {Object} Instance
@@ -72,18 +73,15 @@ export async function findInstance(workspaceHint) {
   return instances[0];
 }
 
-/**
- * HTTP probe — check if bridge is alive on host:port.
- */
+/** HTTP probe — check if bridge is alive. */
 function probe(inst) {
   return new Promise((resolve, reject) => {
-    const req = request(
-      { hostname: inst.host, port: inst.port, path: "/status", method: "GET", timeout: 2000 },
-      (res) => {
-        res.resume();
-        resolve();
-      },
-    );
+    const opts = proxyAwareOptions(
+      inst.host, inst.port, "/status", "GET", 2000);
+    const req = request(opts, (res) => {
+      res.resume();
+      resolve();
+    });
     req.on("error", reject);
     req.on("timeout", () => {
       req.destroy();

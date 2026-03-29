@@ -2,6 +2,7 @@
 
 import { request } from "node:http";
 import { findInstance } from "./discovery.mjs";
+import { proxyAwareOptions } from "./proxy.mjs";
 import { red, bold } from "./color.mjs";
 
 /** @type {import('./discovery.mjs').Instance|null} */
@@ -40,6 +41,11 @@ function authHeaders() {
     : {};
 }
 
+function requestOpts(inst, path, method, timeoutMs) {
+  return proxyAwareOptions(
+    inst.host, inst.port, path, method, timeoutMs, authHeaders());
+}
+
 /**
  * Parse JSON responses, tolerating non-finite numeric literals sometimes
  * returned by the Eclipse bridge (for example `time: NaN` in test results).
@@ -71,14 +77,7 @@ export async function get(path, timeoutMs = 10_000) {
   const inst = await connect();
   return new Promise((resolve, reject) => {
     const req = request(
-      {
-        hostname: inst.host,
-        port: inst.port,
-        path,
-        method: "GET",
-        timeout: timeoutMs,
-        headers: authHeaders(),
-      },
+      requestOpts(inst, path, "GET", timeoutMs),
       (res) => {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
@@ -115,14 +114,7 @@ export async function getRaw(path, timeoutMs = 10_000) {
   const inst = await connect();
   return new Promise((resolve, reject) => {
     const req = request(
-      {
-        hostname: inst.host,
-        port: inst.port,
-        path,
-        method: "GET",
-        timeout: timeoutMs,
-        headers: authHeaders(),
-      },
+      requestOpts(inst, path, "GET", timeoutMs),
       (res) => {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
@@ -171,14 +163,7 @@ export async function getStream(path, dest) {
   const inst = await connect();
   return new Promise((resolve, reject) => {
     const req = request(
-      {
-        hostname: inst.host,
-        port: inst.port,
-        path,
-        method: "GET",
-        timeout: 0, // no timeout for streaming
-        headers: authHeaders(),
-      },
+      requestOpts(inst, path, "GET", 0),
       (res) => {
         if (res.statusCode !== 200) {
           let data = "";
@@ -209,14 +194,7 @@ export async function getStreamLines(path, onLine) {
   const inst = await connect();
   return new Promise((resolve, reject) => {
     const req = request(
-      {
-        hostname: inst.host,
-        port: inst.port,
-        path,
-        method: "GET",
-        timeout: 0,
-        headers: authHeaders(),
-      },
+      requestOpts(inst, path, "GET", 0),
       (res) => {
         if (res.statusCode !== 200) {
           let data = "";
