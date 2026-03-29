@@ -107,10 +107,11 @@ Console output survives in `LaunchTracker` (StringBuilder buffers) but Eclipse's
 Launch tests non-blocking. Analogous to `jdt launch run`.
 
 ```
-jdt test run <FQN>                          class
-jdt test run <FQN>#method                   method
-jdt test run --project <name>               project
-jdt test run --project <name> --package <pkg>   package
+jdt test run <FQN>                                class
+jdt test run <FQN>#method                         method
+jdt test run <FQN> --project <name>               class with project classpath
+jdt test run --project <name>                     project
+jdt test run --project <name> --package <pkg>     package
 
 Flags:
   -f, --follow    stream test status until completion

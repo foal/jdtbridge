@@ -79,6 +79,7 @@ jdt refs <FQMN>                  # find call sites (not string matches)
 jdt source <FQMN>               # source + resolved references (hypertext navigation)
 jdt type-info <FQN>              # class overview without reading 600 lines
 jdt test run <FQN>#<method> -f   # run one test, stream progress
+jdt test run <FQN> --project <name> -f  # run with specific project classpath
 jdt errors --project <name>      # instant compilation check
 jdt build --project <name>       # clean build (default, reliable)
 jdt build --project <name> --incremental  # fast incremental (1-3s)
