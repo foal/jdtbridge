@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.kaluchi</groupId>
         <artifactId>io.github.kaluchi.jdtbridge.parent</artifactId>
-        <version>1.7.0-SNAPSHOT</version>
+        <version>1.8.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>io.github.kaluchi.jdtbridge.tests</artifactId>
