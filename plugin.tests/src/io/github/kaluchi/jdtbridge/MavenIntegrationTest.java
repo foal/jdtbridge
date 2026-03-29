@@ -30,16 +30,12 @@ import org.eclipse.jdt.core.JavaCore;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 /**
  * Integration tests for Maven operations.
  * Creates its own Maven projects (broken + clean) to test
  * success paths, error detection, and all response fields.
  */
-@EnabledIfSystemProperty(
-        named = "jdtbridge.integration-tests",
-        matches = "true")
 public class MavenIntegrationTest {
 
     private static final String MAVEN_PROJECT =
@@ -118,6 +114,13 @@ public class MavenIntegrationTest {
                 + "<artifactId>" + artifactId
                 + "</artifactId>"
                 + "<version>0.0.1</version>"
+                + "<build>"
+                + "<sourceDirectory>src</sourceDirectory>"
+                + "<resources><resource>"
+                + "<directory>src</directory>"
+                + "<excludes><exclude>**/*.java</exclude>"
+                + "</excludes></resource></resources>"
+                + "</build>"
                 + "</project>")
                 .getBytes()), true, null);
 

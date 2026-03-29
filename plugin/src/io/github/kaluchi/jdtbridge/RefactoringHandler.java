@@ -9,6 +9,7 @@ import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspaceRoot;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.preferences.DefaultScope;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IField;
 import org.eclipse.jdt.core.IJavaElement;
@@ -19,6 +20,8 @@ import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.ToolFactory;
 import org.eclipse.jdt.core.formatter.CodeFormatter;
+import org.eclipse.jdt.core.manipulation.CodeStyleConfiguration;
+import org.eclipse.jdt.core.manipulation.JavaManipulation;
 import org.eclipse.jdt.core.manipulation.OrganizeImportsOperation;
 import org.eclipse.jdt.core.refactoring.IJavaRefactorings;
 import org.eclipse.jdt.core.refactoring.descriptors.MoveDescriptor;
@@ -37,6 +40,49 @@ import org.eclipse.text.edits.TextEdit;
  */
 class RefactoringHandler {
 
+    private static final String MANIPULATION_NODE =
+            "org.eclipse.jdt.core.manipulation";
+
+    /**
+     * Ensure import order defaults exist. In headless PDE,
+     * JDT UI may not start and ProjectScope.getNode(null)
+     * hangs if no preference node ID is set.
+     *
+     * We only set the node ID when it's null — if JDT UI
+     * is available, its JavaPlugin.start() sets it first
+     * and we leave it alone.
+     */
+    static void ensurePreferencesInitialized() {
+        String nodeId = JavaManipulation.getPreferenceNodeId();
+        if (nodeId != null) return;
+        // JDT UI not started yet. Check if the bundle exists
+        // (without activating it — activation may need SWT).
+        var jdtUi = org.eclipse.core.runtime.Platform
+                .getBundle("org.eclipse.jdt.ui");
+        if (jdtUi != null && jdtUi.getState()
+                != org.osgi.framework.Bundle.UNINSTALLED) {
+            // Bundle available — let it activate naturally
+            // on first class access. Don't race with
+            // JavaPlugin.start() setPreferenceNodeId().
+            return;
+        }
+        // Truly headless — JDT UI not available at all.
+        nodeId = MANIPULATION_NODE;
+        JavaManipulation.setPreferenceNodeId(nodeId);
+        var defaults = DefaultScope.INSTANCE.getNode(nodeId);
+        defaults.put(
+                CodeStyleConfiguration.ORGIMPORTS_IMPORTORDER,
+                "java;javax;org;com");
+        defaults.put(
+                CodeStyleConfiguration
+                        .ORGIMPORTS_ONDEMANDTHRESHOLD,
+                "99");
+        defaults.put(
+                CodeStyleConfiguration
+                        .ORGIMPORTS_STATIC_ONDEMANDTHRESHOLD,
+                "99");
+    }
+
     String handleOrganizeImports(Map<String, String> params)
             throws Exception {
         String filePath = params.get("file");
@@ -50,6 +96,7 @@ class RefactoringHandler {
         }
 
         cu.getResource().refreshLocal(IResource.DEPTH_ZERO, null);
+        ensurePreferencesInitialized();
 
         OrganizeImportsOperation.IChooseImportQuery query =
                 (openChoices, ranges) -> {
@@ -61,27 +108,29 @@ class RefactoringHandler {
                     return result;
                 };
 
-        cu.becomeWorkingCopy(null);
-        try {
-            OrganizeImportsOperation op =
-                    new OrganizeImportsOperation(
-                            cu, null, true, false, true, query);
-            op.run(null);
+        // Don't use working copy — IBuffer.setContents() goes
+        // through DocumentAdapter → Display.syncExec() which
+        // deadlocks in headless PDE test runtime. Instead,
+        // compute the edit and write the file directly.
+        String source = cu.getSource();
+        OrganizeImportsOperation op =
+                new OrganizeImportsOperation(
+                        cu, null, true, false, true, query);
+        TextEdit edit = op.createTextEdit(null);
 
-            int added = op.getNumberOfImportsAdded();
-            int removed = op.getNumberOfImportsRemoved();
+        int added = op.getNumberOfImportsAdded();
+        int removed = op.getNumberOfImportsRemoved();
 
-            if (added > 0 || removed > 0) {
-                cu.commitWorkingCopy(true, null);
-            }
-
-            var r = new JsonObject();
-            r.addProperty("added", added);
-            r.addProperty("removed", removed);
-            return r.toString();
-        } finally {
-            cu.discardWorkingCopy();
+        if (edit != null && (added > 0 || removed > 0)) {
+            Document doc = new Document(source);
+            edit.apply(doc);
+            writeSource(cu, doc.get());
         }
+
+        var r = new JsonObject();
+        r.addProperty("added", added);
+        r.addProperty("removed", removed);
+        return r.toString();
     }
 
     String handleFormat(Map<String, String> params) throws Exception {
@@ -128,13 +177,7 @@ class RefactoringHandler {
             return r.toString();
         }
 
-        cu.becomeWorkingCopy(null);
-        try {
-            cu.getBuffer().setContents(formatted);
-            cu.commitWorkingCopy(true, null);
-        } finally {
-            cu.discardWorkingCopy();
-        }
+        writeSource(cu, formatted);
 
         var r = new JsonObject();
         r.addProperty("modified", true);
@@ -239,6 +282,21 @@ class RefactoringHandler {
     }
 
     // ---- Helpers ----
+
+    /**
+     * Write source to a compilation unit's file directly,
+     * bypassing working copy / DocumentAdapter which uses
+     * Display.syncExec() and deadlocks in headless runtime.
+     */
+    private void writeSource(ICompilationUnit cu, String source)
+            throws Exception {
+        IFile file = (IFile) cu.getResource();
+        file.setContents(
+                new java.io.ByteArrayInputStream(
+                        source.getBytes(file.getCharset())),
+                IResource.FORCE | IResource.KEEP_HISTORY,
+                null);
+    }
 
     private ICompilationUnit findCompilationUnit(String filePath) {
         IWorkspaceRoot root =
