@@ -121,7 +121,12 @@ class TestHandler {
             return null;
         }
 
-        String configName = "jdtbridge-test-"
+        String prefix = fqn != null && !fqn.isBlank()
+                ? fqn.substring(fqn.lastIndexOf('.') + 1)
+                : projectName != null && !projectName.isBlank()
+                ? projectName
+                : "test";
+        String configName = prefix + "-"
                 + System.currentTimeMillis();
         ILaunchConfigurationWorkingCopy wc =
                 launchType.newInstance(null, configName);
