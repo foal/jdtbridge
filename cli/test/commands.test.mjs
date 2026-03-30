@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createServer } from "node:http";
 import { setColorEnabled } from "../src/color.mjs";
+import { toSandboxPath } from "../src/paths.mjs";
 
 function startServer(handler) {
   return new Promise((resolve) => {
@@ -43,8 +44,16 @@ describe("commands (integration)", () => {
   afterEach(async () => {
     io.restore();
     if (server) await stopServer(server);
+    vi.doUnmock("../src/paths.mjs");
     vi.resetModules();
   });
+
+  function mockSandboxPaths() {
+    vi.doMock("../src/paths.mjs", async (importOriginal) => {
+      const orig = await importOriginal();
+      return { ...orig, toSandboxPath: (p) => p && /^[A-Z]:[/\\]/.test(p) ? "/" + p[0].toLowerCase() + p.slice(2).replace(/\\/g, "/") : p };
+    });
+  }
 
   async function setupMock(handler) {
     ({ server, port } = await startServer(handler));
@@ -210,8 +219,21 @@ describe("commands (integration)", () => {
     });
     const { editors } = await import("../src/commands/editor.mjs");
     await editors();
-    expect(io.logs[0]).toBe("D:/projects/src/Foo.java");
-    expect(io.logs[1]).toBe("D:/projects/src/Bar.java");
+    expect(io.logs[0]).toBe(toSandboxPath("D:/projects/src/Foo.java"));
+    expect(io.logs[1]).toBe(toSandboxPath("D:/projects/src/Bar.java"));
+  });
+
+  it("editors converts paths in sandbox (Linux)", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { file: "D:/projects/src/Foo.java" },
+      ]));
+    });
+    mockSandboxPaths();
+    const { editors } = await import("../src/commands/editor.mjs");
+    await editors();
+    expect(io.logs[0]).toBe("/d/projects/src/Foo.java");
   });
 
   it("editors shows empty message", async () => {
@@ -281,8 +303,26 @@ describe("commands (integration)", () => {
     await source(["com.example.Foo"]);
     const out = io.logs.join("\n");
     expect(out).toContain("[C] com.example.Foo");
-    expect(out).toContain("D:/project/src/Foo.java:5-15");
+    expect(out).toContain(`${toSandboxPath("D:/project/src/Foo.java")}:5-15`);
     expect(out).toContain("public class Foo");
+  });
+
+  it("source converts paths in sandbox (Linux)", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        fqmn: "com.example.Foo",
+        file: "D:/project/src/Foo.java",
+        startLine: 5, endLine: 15,
+        source: "public class Foo {}",
+        refs: [],
+      }));
+    });
+    mockSandboxPaths();
+    const { source } = await import("../src/commands/source.mjs");
+    await source(["com.example.Foo"]);
+    const out = io.logs.join("\n");
+    expect(out).toContain("/d/project/src/Foo.java:5-15");
   });
 
   it("type-info shows class details", async () => {
@@ -986,7 +1026,7 @@ describe("commands (integration)", () => {
     const out = io.logs.join("\n");
     // Header
     expect(out).toContain("[M] com.example.Foo#bar()");
-    expect(out).toContain("D:/project/src/com/example/Foo.java:10-20");
+    expect(out).toContain(`${toSandboxPath("D:/project/src/com/example/Foo.java")}:10-20`);
     // Code block
     expect(out).toContain("```java");
     expect(out).toContain("public void bar()");
