@@ -23,8 +23,18 @@ export async function run({ agent, name, agentArgs, session }) {
 
   const workDir = session?.workingDir || null;
 
+  // Merge custom env vars from session (Eclipse Environment tab)
+  const customEnv = session?.env || {};
+  const allEnv = { ...bridgeEnv, ...customEnv };
+
   console.log(`Bridge: port ${bridgeEnv.JDT_BRIDGE_PORT}`);
   console.log(`Session: ${name}`);
+  console.log(`Agent: ${agent}`);
+  if (agentArgs.length > 0) console.log(`Arguments: ${agentArgs.join(" ")}`);
+  if (Object.keys(customEnv).length > 0) {
+    const pairs = Object.entries(customEnv).map(([k, v]) => `${k}=${v}`);
+    console.log(`Custom env: ${pairs.join(", ")}`);
+  }
   if (workDir) console.log(`Working dir: ${workDir}`);
 
   if (session && workDir) {
@@ -32,7 +42,7 @@ export async function run({ agent, name, agentArgs, session }) {
   }
 
   const agentCmd = [agent, ...agentArgs].join(" ");
-  const child = openAgentTerminal(name, agentCmd, bridgeEnv, workDir);
+  const child = openAgentTerminal(name, agentCmd, allEnv, workDir);
 
   const agentFile = join(agentsDir(), `${name}.json`);
   writeFileSync(agentFile, JSON.stringify({
