@@ -20,7 +20,7 @@ plugin:
 plugin-tests:
   - changed-files:
       - any-glob-to-any-file:
-          - 'plugin.tests/**'
+          - 'plugin[.]tests/**'
 
 plugin-ui:
   - changed-files:
