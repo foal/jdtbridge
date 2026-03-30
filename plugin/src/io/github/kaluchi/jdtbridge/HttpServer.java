@@ -42,12 +42,13 @@ public class HttpServer {
     private final TestHandler testHandler =
             new TestHandler(testSessionTracker);
     private final ProjectHandler projectInfo = new ProjectHandler();
+    private final RequestTracker requestTracker = new RequestTracker();
     private final ConfigService configService =
             new ConfigService(Activator.getHome());
     private final WelcomeHandler welcome =
             new WelcomeHandler(configService);
     private final ExecutorService executor =
-            Executors.newFixedThreadPool(4, r -> {
+            Executors.newCachedThreadPool(r -> {
                 Thread t = new Thread(r, "jdtbridge-req");
                 t.setDaemon(true);
                 return t;
@@ -91,6 +92,8 @@ public class HttpServer {
     public void setToken(String token) {
         this.token = token;
     }
+
+
 
     public void stop() {
         launchTracker.stop();
@@ -137,6 +140,7 @@ public class HttpServer {
 
             // Read headers
             String authHeader = null;
+            String sessionHeader = null;
             int contentLength = 0;
             String line;
             while ((line = reader.readLine()) != null
@@ -148,6 +152,9 @@ public class HttpServer {
                         "Content-Length:", 0, 15)) {
                     contentLength = Integer.parseInt(
                             line.substring(15).trim());
+                } else if (line.regionMatches(true, 0,
+                        "X-Bridge-Session:", 0, 17)) {
+                    sessionHeader = line.substring(17).trim();
                 }
             }
 
@@ -206,8 +213,30 @@ public class HttpServer {
                 return;
             }
 
+            // Telemetry — POST enqueues, GET drains
+            if ("/telemetry".equals(path)) {
+                if ("POST".equals(method) && body != null
+                        && sessionHeader != null) {
+                    requestTracker.logTelemetry(sessionHeader, body);
+                    sendResponse(socket,
+                            Response.json("{\"ok\":true}"));
+                } else {
+                    String sess = params.get("session");
+                    String text = sess != null
+                            ? requestTracker.drain(sess) : "";
+                    sendResponse(socket,
+                            Response.text(text, Map.of()));
+                }
+                return;
+            }
+
+            long startNs = System.nanoTime();
             Response resp = dispatch(path, params);
+            long durationMs = (System.nanoTime() - startNs) / 1_000_000;
             sendResponse(socket, resp);
+
+            requestTracker.logRequest(sessionHeader, method, path,
+                    200, durationMs);
         } catch (Exception e) {
             Log.error("Request error", e);
         }
