@@ -33,7 +33,18 @@ import {
   editorsHelp,
   openHelp,
 } from "./commands/editor.mjs";
-import { sandboxRun, help as sandboxRunHelp } from "./commands/sandbox.mjs";
+import {
+  agentRun,
+  agentList,
+  agentStop,
+  agentLogs,
+  agentProviders,
+  agentRunHelp,
+  agentListHelp,
+  agentStopHelp,
+  agentLogsHelp,
+  agentProvidersHelp,
+} from "./commands/agent.mjs";
 import {
   launchList,
   launchConfigs,
@@ -128,27 +139,35 @@ async function testDispatch(args) {
   await cmd.fn(rest);
 }
 
-const sandboxHelp = `Run an agent in a Docker sandbox with JDT Bridge connectivity.
-
-Subcommands:
-  jdt sandbox run <agent> [workspace] [-- agent-args...]
-
-Use "jdt help sandbox run" for details.`;
-
-const sandboxSubcommands = {
-  run: { fn: sandboxRun, help: sandboxRunHelp },
+const agentSubcommands = {
+  run: { fn: agentRun, help: agentRunHelp },
+  list: { fn: agentList, help: agentListHelp },
+  stop: { fn: agentStop, help: agentStopHelp },
+  logs: { fn: agentLogs, help: agentLogsHelp },
+  providers: { fn: agentProviders, help: agentProvidersHelp },
 };
 
-async function sandboxDispatch(args) {
+const agentHelp = `Manage AI agent sessions (run, stop, list, logs).
+
+Subcommands:
+  jdt agent run <provider> <agent> [--name <id>]   launch agent session
+  jdt agent list                                    running sessions
+  jdt agent stop <name>                             stop by session ID
+  jdt agent logs <name> [-f]                        stream output
+  jdt agent providers                               available providers
+
+Use "jdt help agent <subcommand>" for details.`;
+
+async function agentDispatch(args) {
   const [sub, ...rest] = args;
   if (!sub || sub === "--help") {
-    console.log(sandboxHelp);
+    console.log(agentHelp);
     return;
   }
-  const cmd = sandboxSubcommands[sub];
+  const cmd = agentSubcommands[sub];
   if (!cmd) {
-    console.error(`Unknown sandbox subcommand: ${sub}`);
-    console.log(sandboxHelp);
+    console.error(`Unknown agent subcommand: ${sub}`);
+    console.log(agentHelp);
     process.exit(1);
   }
   await cmd.fn(rest);
@@ -176,7 +195,7 @@ const commands = {
   editors: { fn: editors, help: editorsHelp },
   open: { fn: open, help: openHelp },
   launch: { fn: launchDispatch, help: launchHelp },
-  sandbox: { fn: sandboxDispatch, help: sandboxHelp },
+  agent: { fn: agentDispatch, help: agentHelp },
   setup: { fn: setup, help: setupHelp },
 };
 
@@ -261,8 +280,12 @@ Editor:
   editors${fmtAliases("editors")}                                    list open editors (absolute paths)
   open <FQMN>                                 open in Eclipse editor
 
-Docker:
-  sandbox run <agent> [workspace]             run agent in sandbox with bridge
+Agents:
+  agent run <provider> <agent> [--name <id>]  launch agent session
+  agent list                                  running agent sessions
+  agent stop <name>                           stop agent by session ID
+  agent logs <name> [-f]                      stream agent output
+  agent providers                             available providers
 
 Setup:
   setup [--check|--remove]                    install/check/remove Eclipse plugin
@@ -290,8 +313,8 @@ export async function run(argv) {
       console.log(launchSubcommands[rest[1]].help);
     } else if (resolved === "test" && rest[1] && testSubcommands[rest[1]]) {
       console.log(testSubcommands[rest[1]].help);
-    } else if (resolved === "sandbox" && rest[1] && sandboxSubcommands[rest[1]]) {
-      console.log(sandboxSubcommands[rest[1]].help);
+    } else if (resolved === "agent" && rest[1] && agentSubcommands[rest[1]]) {
+      console.log(agentSubcommands[rest[1]].help);
     } else if (resolved) {
       console.log(commands[resolved].help);
     } else if (topic) {
