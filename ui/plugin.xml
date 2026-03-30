@@ -96,6 +96,7 @@
 
    <extension point="org.eclipse.debug.ui.launchConfigurationTypeImages">
       <launchConfigurationTypeImage
+            id="io.github.kaluchi.jdtbridge.ui.agentLaunchTypeImage"
             configTypeID="io.github.kaluchi.jdtbridge.ui.agentLaunchType"
             icon="icons/agent.svg"/>
    </extension>
