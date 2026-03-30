@@ -1,6 +1,6 @@
 import { get } from "../client.mjs";
 import { extractPositional } from "../args.mjs";
-import { stripProject } from "../paths.mjs";
+import { stripProject, toSandboxPath } from "../paths.mjs";
 import { dim } from "../color.mjs";
 
 export async function typeInfo(args) {
@@ -19,7 +19,7 @@ export async function typeInfo(args) {
     process.exit(1);
   }
 
-  const filePath = stripProject(result.file);
+  const filePath = toSandboxPath(stripProject(result.file));
   console.log(`${result.kind} ${result.fqn}  ${dim(`(${filePath})`)}`);
   if (result.superclass) console.log(`  extends ${result.superclass}`);
   for (const iface of result.interfaces) {

@@ -1,12 +1,12 @@
 // References output formatter.
 // Groups source references by file, binary references by project+jar.
 
-import { stripProject } from "../paths.mjs";
+import { stripProject, toSandboxPath } from "../paths.mjs";
 
 export function formatReferences(results) {
   let lastGroup = "";
   for (const r of results) {
-    const f = stripProject(r.file);
+    const f = toSandboxPath(stripProject(r.file));
     const isBinary = r.line <= 0;
     const group = isBinary ? `${r.project || "?"}  ${f}` : f;
     if (group !== lastGroup) {

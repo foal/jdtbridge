@@ -1,6 +1,6 @@
 import { get } from "../client.mjs";
 import { extractPositional } from "../args.mjs";
-import { stripProject } from "../paths.mjs";
+import { stripProject, toSandboxPath } from "../paths.mjs";
 
 export async function subtypes(args) {
   const pos = extractPositional(args);
@@ -22,7 +22,7 @@ export async function subtypes(args) {
     return;
   }
   for (const r of results) {
-    console.log(`${r.fqn}  ${stripProject(r.file)}`);
+    console.log(`${r.fqn}  ${toSandboxPath(stripProject(r.file))}`);
   }
 }
 

@@ -1,6 +1,6 @@
 import { get } from "../client.mjs";
 import { parseFlags } from "../args.mjs";
-import { stripProject, toWsPath } from "../paths.mjs";
+import { stripProject, toWsPath, toSandboxPath } from "../paths.mjs";
 import { red, yellow } from "../color.mjs";
 
 export async function errors(args) {
@@ -26,7 +26,7 @@ export async function errors(args) {
   for (const r of results) {
     const sev = r.severity === "ERROR" ? red("ERROR") : yellow("WARN ");
     const src = r.source ? `[${r.source}] ` : "";
-    console.log(`${sev} ${src}${stripProject(r.file)}:${r.line}  ${r.message}`);
+    console.log(`${sev} ${src}${toSandboxPath(stripProject(r.file))}:${r.line}  ${r.message}`);
   }
 }
 

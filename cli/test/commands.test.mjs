@@ -89,6 +89,42 @@ describe("commands (integration)", () => {
     expect(io.logs[0]).toContain("my-server/src/main/java/app/my/Foo.java");
   });
 
+  it("find shows absolute Windows path on host", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { fqn: "com.example.Foo", file: "D:/git/project/src/Foo.java" },
+      ]));
+    });
+    const { find } = await import("../src/commands/find.mjs");
+    await find(["Foo"]);
+    expect(io.logs[0]).toContain(toSandboxPath("D:/git/project/src/Foo.java"));
+  });
+
+  it("find shows JAR project path on host", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { fqn: "javax.swing.JPanel", file: "D:/git/m8/m8-client" },
+      ]));
+    });
+    const { find } = await import("../src/commands/find.mjs");
+    await find(["JPanel"]);
+    expect(io.logs[0]).toContain(toSandboxPath("D:/git/m8/m8-client"));
+  });
+
+  it("find shows backslash Windows path", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { fqn: "com.example.Bar", file: "D:\\git\\project\\src\\Bar.java" },
+      ]));
+    });
+    const { find } = await import("../src/commands/find.mjs");
+    await find(["Bar"]);
+    expect(io.logs[0]).toContain(toSandboxPath("D:\\git\\project\\src\\Bar.java"));
+  });
+
   it("find shows no results message", async () => {
     await setupMock((req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -1136,5 +1172,199 @@ describe("commands (integration)", () => {
     });
     const { references } = await import("../src/commands/references.mjs");
     await references(["app.Foo", "--field", "myField"]);
+  });
+
+  // ---- Sandbox path conversion (Linux) ----
+
+  it("find converts source path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { fqn: "com.example.Foo", file: "D:/git/project/src/Foo.java" },
+      ]));
+    });
+    mockSandboxPaths();
+    const { find } = await import("../src/commands/find.mjs");
+    await find(["Foo"]);
+    expect(io.logs[0]).toContain("/d/git/project/src/Foo.java");
+  });
+
+  it("find converts JAR project path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { fqn: "javax.swing.table.TableModel", file: "D:/git/m8/m8-client" },
+      ]));
+    });
+    mockSandboxPaths();
+    const { find } = await import("../src/commands/find.mjs");
+    await find(["TableModel"]);
+    expect(io.logs[0]).toContain("/d/git/m8/m8-client");
+  });
+
+  it("find keeps workspace-relative path unchanged in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { fqn: "com.example.Foo", file: "/my-server/src/Foo.java" },
+      ]));
+    });
+    mockSandboxPaths();
+    const { find } = await import("../src/commands/find.mjs");
+    await find(["Foo"]);
+    expect(io.logs[0]).toContain("my-server/src/Foo.java");
+    expect(io.logs[0]).not.toContain("/d/");
+  });
+
+  it("errors converts path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { file: "D:/git/project/src/Foo.java", line: 10, severity: "ERROR", message: "bad" },
+      ]));
+    });
+    mockSandboxPaths();
+    const { errors } = await import("../src/commands/errors.mjs");
+    await errors([]);
+    expect(io.logs[0]).toContain("/d/git/project/src/Foo.java:10");
+  });
+
+  it("errors keeps workspace-relative path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { file: "/my-server/src/Foo.java", line: 5, severity: "ERROR", message: "err" },
+      ]));
+    });
+    mockSandboxPaths();
+    const { errors } = await import("../src/commands/errors.mjs");
+    await errors([]);
+    expect(io.logs[0]).toContain("my-server/src/Foo.java:5");
+  });
+
+  it("subtypes converts path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { fqn: "com.example.Dog", file: "D:/git/project/src/Dog.java" },
+      ]));
+    });
+    mockSandboxPaths();
+    const { subtypes } = await import("../src/commands/subtypes.mjs");
+    await subtypes(["com.example.Animal"]);
+    expect(io.logs[0]).toContain("/d/git/project/src/Dog.java");
+  });
+
+  it("subtypes converts JAR path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { fqn: "com.example.Impl", file: "D:/git/m8/m8-core" },
+      ]));
+    });
+    mockSandboxPaths();
+    const { subtypes } = await import("../src/commands/subtypes.mjs");
+    await subtypes(["com.example.Base"]);
+    expect(io.logs[0]).toContain("/d/git/m8/m8-core");
+  });
+
+  it("implementors converts path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { fqn: "com.example.FooImpl", file: "D:/git/project/src/FooImpl.java", line: 15 },
+      ]));
+    });
+    mockSandboxPaths();
+    const { implementors } = await import("../src/commands/implementors.mjs");
+    await implementors(["com.example.Foo#bar"]);
+    expect(io.logs[0]).toContain("/d/git/project/src/FooImpl.java:15");
+  });
+
+  it("type-info converts path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        kind: "class", fqn: "com.example.Foo", file: "D:/git/project/src/Foo.java",
+        superclass: "java.lang.Object", interfaces: [],
+        fields: [], methods: [],
+      }));
+    });
+    mockSandboxPaths();
+    const { typeInfo } = await import("../src/commands/type-info.mjs");
+    await typeInfo(["com.example.Foo"]);
+    expect(io.logs[0]).toContain("/d/git/project/src/Foo.java");
+  });
+
+  it("type-info converts JAR path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        kind: "class", fqn: "javax.swing.JPanel", file: "D:/git/m8/m8-client",
+        superclass: "javax.swing.JComponent", interfaces: [],
+        fields: [], methods: [],
+      }));
+    });
+    mockSandboxPaths();
+    const { typeInfo } = await import("../src/commands/type-info.mjs");
+    await typeInfo(["javax.swing.JPanel"]);
+    expect(io.logs[0]).toContain("/d/git/m8/m8-client");
+  });
+
+  it("references converts source path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { file: "D:/git/project/src/Caller.java", line: 42, in: "doStuff()", content: "foo.bar();" },
+      ]));
+    });
+    mockSandboxPaths();
+    const { references } = await import("../src/commands/references.mjs");
+    await references(["com.example.Foo"]);
+    expect(io.logs[0]).toContain("/d/git/project/src/Caller.java:42");
+  });
+
+  it("references converts binary project path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { file: "D:/git/m8/m8-core/lib/dep.jar", line: -1, project: "m8-core", in: "com.Dep#use()" },
+      ]));
+    });
+    mockSandboxPaths();
+    const { references } = await import("../src/commands/references.mjs");
+    await references(["com.example.Foo"]);
+    expect(io.logs[0]).toContain("m8-core");
+    expect(io.logs[0]).toContain("dep.jar");
+  });
+
+  it("hierarchy converts file path in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        supertypes: [{ fqn: "java.lang.Object", kind: "class" }],
+        subtypes: [{ fqn: "com.example.Dog", kind: "class", file: "D:/git/project/src/Dog.java", line: 5 }],
+      }));
+    });
+    mockSandboxPaths();
+    const { hierarchy } = await import("../src/commands/hierarchy.mjs");
+    await hierarchy(["com.example.Animal"]);
+    const out = io.logs.join("\n");
+    expect(out).toContain("/d/git/project/src/Dog.java");
+  });
+
+  it("project-info converts location in sandbox", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        name: "m8-server", location: "D:/git/m8/m8-server",
+        natures: [], dependencies: [], totalTypes: 10, sourceRoots: [],
+      }));
+    });
+    mockSandboxPaths();
+    const { projectInfo } = await import("../src/commands/project-info.mjs");
+    await projectInfo(["m8-server"]);
+    const out = io.logs.join("\n");
+    expect(out).toContain("/d/git/m8/m8-server");
   });
 });
