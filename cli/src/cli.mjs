@@ -46,6 +46,7 @@ import {
   agentProvidersHelp,
 } from "./commands/agent.mjs";
 import { status, help as statusHelp } from "./commands/status.mjs";
+import { git, help as gitHelp } from "./commands/git.mjs";
 import {
   launchList,
   launchConfigs,
@@ -199,6 +200,7 @@ const commands = {
   editors: { fn: editors, help: editorsHelp },
   open: { fn: open, help: openHelp },
   status: { fn: status, help: statusHelp },
+  git: { fn: git, help: gitHelp },
   launch: { fn: launchDispatch, help: launchHelp },
   agent: { fn: agentDispatch, help: agentHelp },
   setup: { fn: setup, help: setupHelp },

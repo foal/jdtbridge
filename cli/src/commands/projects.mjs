@@ -1,5 +1,7 @@
+import { basename } from "node:path";
 import { get } from "../client.mjs";
-import { dim } from "../color.mjs";
+import { toSandboxPath } from "../paths.mjs";
+import { formatTable } from "../format/table.mjs";
 
 export async function projects() {
   const results = await get("/projects");
@@ -11,12 +13,23 @@ export async function projects() {
     console.log("(no projects)");
     return;
   }
-  console.log(`${results.length} projects:\n`);
-  for (const p of results) console.log(`- \`${p}\``);
+
+  const repoSet = new Set();
+  const rows = results.map((p) => {
+    const name = p.name || p;
+    const loc = toSandboxPath(p.location || "");
+    const repo = (p.repo || "").replace(/\\/g, "/");
+    const repoName = repo ? basename(repo) : "";
+    if (repoName) repoSet.add(repoName);
+    return [`\`${name}\``, loc, repoName];
+  });
+
+  console.log(formatTable(["PROJECT", "LOCATION", "REPO"], rows));
+  console.log(`\n${results.length} projects, ${repoSet.size} repos`);
 }
 
-export const help = `List all Java projects in the Eclipse workspace.
+export const help = `List workspace projects with repo mapping.
 
 Usage:  jdt projects
 
-Output: one project name per line.`;
+Output: PROJECT, REPO — one project per line.`;

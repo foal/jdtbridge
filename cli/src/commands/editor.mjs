@@ -1,6 +1,8 @@
+import { basename } from "node:path";
 import { get } from "../client.mjs";
 import { extractPositional, parseFlags, parseFqmn } from "../args.mjs";
 import { toSandboxPath } from "../paths.mjs";
+import { dim } from "../color.mjs";
 
 export async function editors() {
   const results = await get("/editors");
@@ -12,9 +14,14 @@ export async function editors() {
     console.log("(no open editors)");
     return;
   }
-  for (const r of results) {
-    console.log(toSandboxPath(r.file));
-  }
+  const rows = results.map((r) => [
+    r.active ? ">" : "",
+    r.fqn ? `\`${r.fqn}\`` : basename(r.file),
+    r.project || "",
+    toSandboxPath(r.file),
+  ]);
+  const { formatTable } = await import("../format/table.mjs");
+  console.log(formatTable([" ", "FILE", "PROJECT", "PATH"], rows));
 }
 
 export async function open(args) {

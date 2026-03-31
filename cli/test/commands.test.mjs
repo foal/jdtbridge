@@ -274,31 +274,53 @@ describe("commands (integration)", () => {
     expect(io.logs[0]).toBe("Moved");
   });
 
-  it("editors lists open files", async () => {
+  it("editors shows table with headers and active marker", async () => {
     await setupMock((req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify([
-        { file: "D:/projects/src/Foo.java" },
-        { file: "D:/projects/src/Bar.java" },
+        { file: "D:/projects/src/Foo.java", fqn: "com.example.Foo", project: "my-server", active: true },
+        { file: "D:/projects/src/Bar.java", fqn: "com.example.Bar", project: "my-server" },
       ]));
     });
     const { editors } = await import("../src/commands/editor.mjs");
     await editors();
-    expect(io.logs[0]).toBe(toSandboxPath("D:/projects/src/Foo.java"));
-    expect(io.logs[1]).toBe(toSandboxPath("D:/projects/src/Bar.java"));
+    const out = io.logs[0];
+    expect(out).toContain("FILE");
+    expect(out).toContain("PROJECT");
+    expect(out).toContain("PATH");
+    expect(out).toContain("`com.example.Foo`");
+    expect(out).toContain("`com.example.Bar`");
+    expect(out).toContain(">");
+    expect(out).toContain("my-server");
+    expect(out).toContain(toSandboxPath("D:/projects/src/Foo.java"));
+  });
+
+  it("editors shows basename for non-java files", async () => {
+    await setupMock((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([
+        { file: "D:/projects/pom.xml", project: "my-server" },
+      ]));
+    });
+    const { editors } = await import("../src/commands/editor.mjs");
+    await editors();
+    const out = io.logs[0];
+    expect(out).toContain("pom.xml");
+    expect(out).not.toContain("`");
   });
 
   it("editors converts paths in sandbox (Linux)", async () => {
     await setupMock((req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify([
-        { file: "D:/projects/src/Foo.java" },
+        { file: "D:/projects/src/Foo.java", fqn: "com.example.Foo", project: "my-server" },
       ]));
     });
     mockSandboxPaths();
     const { editors } = await import("../src/commands/editor.mjs");
     await editors();
-    expect(io.logs[0]).toBe("/d/projects/src/Foo.java");
+    const out = io.logs[0];
+    expect(out).toContain("/d/projects/src/Foo.java");
   });
 
   it("editors shows empty message", async () => {

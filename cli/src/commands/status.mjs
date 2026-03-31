@@ -2,39 +2,54 @@
  * Composite dashboard — shows Eclipse IDE state in one call.
  * Each section maps to a standalone jdt command for incremental refresh.
  *
- * Usage:
- *   jdt status              all sections + help
- *   jdt status -q           all sections, no help
- *   jdt status git editors  specific sections only
+ * Architecture:
+ *   Renderer  — returns { title, cmd, body } (pure data, no formatting)
+ *   Compositor — assembles sections into markdown with code fences
+ *   Helpers   — reposFromServer, gitCmd, ago (stateless utilities)
  */
 
-import { execSync, spawnSync } from "node:child_process";
-import { dirname, basename } from "node:path";
-import { get } from "../client.mjs";
-import { toSandboxPath } from "../paths.mjs";
-import { formatTable } from "../format/table.mjs";
-import { green, red, yellow, dim } from "../color.mjs";
+import { execSync } from "node:child_process";
+import { basename } from "node:path";
 
-const SECTIONS = ["git", "editors", "errors", "launches", "tests", "projects"];
+// ---- Public API ----
+
+const SECTION_NAMES = ["git", "editors", "errors", "launches", "tests", "projects", "guide"];
 
 export async function status(args) {
   const quiet = args.includes("-q") || args.includes("--quiet");
   const requested = args.filter((a) => !a.startsWith("-"));
   const sections = requested.length > 0
-    ? requested.filter((s) => SECTIONS.includes(s))
-    : SECTIONS;
+    ? requested.filter((s) => SECTION_NAMES.includes(s))
+    : SECTION_NAMES.filter((s) => s !== "guide");
 
-  const parts = [];
-  for (const s of sections) {
-    const fn = RENDERERS[s];
-    if (fn) parts.push(await fn());
+  const results = [];
+  for (const name of sections) {
+    const renderer = RENDERERS[name];
+    if (renderer) results.push(await renderer());
   }
-  if (!quiet) parts.push(renderHelp());
 
-  console.log(parts.join("\n\n"));
+  const showGuide = !quiet && requested.length === 0;
+  if (showGuide) results.push(guideSection());
+  // Explicit "guide" in args always shows it
+  if (sections.includes("guide") && !showGuide) results.push(guideSection());
+
+  const single = results.length === 1;
+  console.log(results.map((s) => formatSection(s, single)).join("\n\n"));
 }
 
-// ---- Section renderers ----
+// ---- Compositor ----
+
+/**
+ * Format a section object into markdown.
+ * Single section: no ## header, just ```bash block.
+ * Multiple sections: ## Title + ```bash block.
+ */
+function formatSection({ title, cmd, body }, single) {
+  if (single) return body;
+  return `## ${title}\n\n\`\`\`bash\n$ ${cmd}\n${body}\n\`\`\``;
+}
+
+// ---- Renderers (return { title, cmd, body }) ----
 
 const RENDERERS = {
   git: renderGit,
@@ -46,217 +61,116 @@ const RENDERERS = {
 };
 
 async function renderGit() {
-  const projects = await get("/projects");
-  if (projects.error) return "## Git\n\n$ jdt git\n(unavailable)";
-
-  const repos = reposFromServer(projects);
-  const lines = ["## Git", "", "$ jdt git"];
-
-  const headers = ["REPO", "BRANCH", "STATUS"];
-  const repoRows = [];
-
-  for (const repo of repos) {
-    const repoPath = toSandboxPath(repo.path);
-    const statusOut = gitCmd(repo.path, "git status --short") || "";
-    const dirty = statusOut.split("\n").filter((l) => l.trim()).length;
-    const status = dirty > 0 ? `${dirty} modified` : "clean";
-    repoRows.push([repoPath, repo.branch, status]);
-
-    if (dirty > 0 && dirty <= 10) {
-      repoRows.push(...statusOut.split("\n").filter((l) => l.trim())
-        .map((l) => ["  " + l.trim(), "", ""]));
-    } else if (dirty > 10) {
-      const top = statusOut.split("\n").filter((l) => l.trim()).slice(0, 5);
-      for (const l of top) repoRows.push(["  " + l.trim(), "", ""]);
-      repoRows.push([`  ...+${dirty - 5} more`, "", ""]);
-    }
-  }
-  lines.push(formatTable(headers, repoRows));
-  return lines.join("\n");
+  return { title: "Git", cmd: "jdt git list --no-files", body: cliCmd("jdt git list --no-files") };
 }
 
 async function renderEditors() {
-  const results = await get("/editors");
-  const lines = ["## Editors", "", "$ jdt editors"];
-  if (results.error || results.length === 0) {
-    lines.push("(no open editors)");
-    return lines.join("\n");
-  }
-
-  for (const r of results) {
-    const marker = r.active ? " > " : "   ";
-    const name = r.fqn ? `\`${r.fqn}\`` : basename(r.file);
-    const proj = r.project || "";
-    lines.push(`${marker}${name}  ${dim(proj)}`);
-  }
-  return lines.join("\n");
+  return { title: "Editors", cmd: "jdt editors", body: cliCmd("jdt editors") };
 }
 
 async function renderErrors() {
-  const results = await get("/errors", 180_000);
-  const lines = ["## Errors", "", "$ jdt errors"];
-  if (results.error) { lines.push(results.error); return lines.join("\n"); }
-  if (results.length === 0) { lines.push("(no errors)"); return lines.join("\n"); }
-
-  for (const r of results) {
-    const sev = r.severity === "ERROR" ? red("ERROR") : yellow("WARN ");
-    lines.push(`${sev} ${toSandboxPath(r.file)}:${r.line}  ${r.message}`);
-  }
-  return lines.join("\n");
+  return { title: "Errors", cmd: "jdt errors", body: cliCmd("jdt errors") };
 }
 
 async function renderLaunches() {
-  const results = await get("/launch/list");
-  const lines = ["## Launches", "", "$ jdt launch list"];
-  if (results.error) { lines.push(results.error); return lines.join("\n"); }
-
-  const running = Array.isArray(results)
-    ? results.filter((r) => !r.terminated) : [];
-  if (running.length === 0) {
-    const total = Array.isArray(results) ? results.length : 0;
-    lines.push(total > 0
-      ? `(no running launches, ${total} terminated)`
-      : "(no launches)");
-    return lines.join("\n");
-  }
-
-  const headers = ["NAME", "TYPE", "MODE", "PID"];
-  const rows = running.map((r) => [r.name, r.type, r.mode, r.pid ? `${r.pid}` : ""]);
-  lines.push(formatTable(headers, rows));
-  return lines.join("\n");
+  return { title: "Launches", cmd: "jdt launch list", body: cliCmd("jdt launch list") };
 }
 
 async function renderTests() {
-  const results = await get("/test/sessions");
-  const lines = ["## Tests", "", "$ jdt test sessions"];
-  if (results.error) { lines.push(results.error); return lines.join("\n"); }
-  if (results.length === 0) { lines.push("(no test sessions)"); return lines.join("\n"); }
-
-  // Latest per label only
-  const seen = new Set();
-  const latest = results.filter((s) => {
-    const key = s.label || s.session;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  const now = Date.now();
-  const headers = ["SESSION", "TESTS", "RESULT", "STATUS"];
-  const rows = latest.map((s) => {
-    const startMs = s.startedAt || 0;
-    const counts = [];
-    if (s.passed > 0) counts.push(green(`${s.passed} passed`));
-    if (s.failed > 0) counts.push(red(`${s.failed} failed`));
-    let st;
-    if (s.state === "running") {
-      st = startMs ? `running, started ${ago(now - startMs)}` : "running";
-    } else {
-      const endMs = startMs && s.time > 0 ? startMs + s.time * 1000 : 0;
-      st = endMs ? `finished ${ago(now - endMs)}` : "finished";
-    }
-    return [s.label || s.session, `${s.total}`, counts.join(", "), st];
-  });
-  lines.push(formatTable(headers, rows));
-  return lines.join("\n");
+  return { title: "Tests", cmd: "jdt test sessions", body: cliCmd("jdt test sessions") };
 }
 
 async function renderProjects() {
-  const projects = await get("/projects");
-  const lines = ["## Projects", "", "$ jdt projects"];
-  if (projects.error) { lines.push(projects.error); return lines.join("\n"); }
-  if (projects.length === 0) { lines.push("(no projects)"); return lines.join("\n"); }
-
-  const repos = reposFromServer(projects);
-
-  // Get dirty file counts per project dir
-  const dirtyMap = {};
-  for (const repo of repos) {
-    const statusOut = gitCmd(repo.path, "git status --short") || "";
-    for (const line of statusOut.split("\n")) {
-      if (!line.trim()) continue;
-      const file = line.slice(3);
-      const dir = file.split("/")[0];
-      dirtyMap[repo.path + "/" + dir] = (dirtyMap[repo.path + "/" + dir] || 0) + 1;
-    }
-  }
-
-  const headers = ["PROJECT", "REPO", "MODIFIED"];
-  const rows = [];
-
-  // Dirty first, then clean
-  const withDirty = [];
-  const clean = [];
-  for (const p of projects) {
-    const name = typeof p === "string" ? p : p.name;
-    const loc = typeof p === "string" ? "" : (p.location || "");
-    const normLoc = loc.replace(/\\/g, "/");
-    const repoName = repos.find((r) => normLoc.startsWith(r.path))?.name || "";
-    const dirKey = normLoc;
-    const parentKey = dirname(normLoc) + "/" + basename(normLoc);
-    const count = dirtyMap[normLoc] || dirtyMap[parentKey] || 0;
-    if (count > 0) {
-      withDirty.push([`\`${name}\``, repoName, `~${count}`]);
-    } else {
-      clean.push([`\`${name}\``, repoName, "—"]);
-    }
-  }
-
-  // Sort dirty by count descending
-  withDirty.sort((a, b) => parseInt(b[2].slice(1)) - parseInt(a[2].slice(1)));
-  rows.push(...withDirty, ...clean);
-
-  lines.push(formatTable(headers, rows));
-  lines.push("");
-  lines.push(`${projects.length} projects, ${repos.length} repos`);
-  return lines.join("\n");
+  return { title: "Projects", cmd: "jdt projects", body: cliCmd("jdt projects") };
 }
 
-function renderHelp() {
-  return `## Refresh
+function guideSection() {
+  return {
+    title: "Guide",
+    cmd: "jdt status guide",
+    body: `This dashboard is a composite of standalone commands.
+Refresh the full dashboard or individual sections.
+-q suppresses this guide. Selecting sections suppresses it too.
 
-  jdt status              full dashboard
-  jdt status -q           without this guide
-  jdt status git          only git state
-  jdt status editors      only open editors
-  jdt status errors       only compilation errors
-  jdt status launches     only running launches
-  jdt status tests        only test sessions
-  jdt status projects     only project list
+  jdt status                  all sections + this guide
+  jdt status -q               all sections, no guide
+  jdt status git              only git repos and branches
+  jdt status editors          only open editor tabs
+  jdt status errors           only compilation errors
+  jdt status launches         only running launches
+  jdt status tests            only test results
+  jdt status projects         only project list
+  jdt status guide            only this guide
 
-  Add -q to suppress this guide.`;
+Each section can also be refreshed with its standalone command:
+
+  jdt git                     same as jdt status git
+  jdt editors                 same as jdt status editors
+  jdt errors                  compilation errors (with --project for one project)
+  jdt launch list             same as jdt status launches
+  jdt test sessions           same as jdt status tests
+  jdt projects                same as jdt status projects
+
+Combine sections for focused refresh:
+
+  jdt status editors errors   what's open + what's broken
+  jdt status git tests        repo state + test results
+  jdt status git projects     repos + project list
+
+Specialized refresh after editing code:
+
+  jdt errors                  check compilation after edit
+  jdt errors --project X      check one project only (faster)
+  jdt test run FQN -f -q      run one test, stream result
+  jdt build --project X       trigger build if auto-build is off`,
+  };
 }
 
-// ---- Helpers ----
+// ---- Helpers (stateless, exported for testing) ----
 
-/** Extract unique repos from server /projects response (EGit data). */
-function reposFromServer(projects) {
+export function reposFromServer(projects) {
   const seen = new Map();
   for (const p of projects) {
     const repo = (p.repo || "").replace(/\\/g, "/");
     if (!repo) continue;
     if (!seen.has(repo)) {
-      seen.set(repo, {
-        path: repo,
-        name: basename(repo),
-        branch: p.branch || "",
-        projects: [],
-      });
+      seen.set(repo, { path: repo, name: basename(repo), branch: p.branch || "", projects: [] });
     }
-    seen.get(repo).projects.push(p.name);
+    seen.get(repo).projects.push(p.name || p);
   }
   return [...seen.values()];
 }
 
-function gitCmd(repoPath, cmd) {
+export function buildDirtyMap(repos) {
+  const map = {};
+  for (const repo of repos) {
+    const statusOut = gitCmd(repo.path, "git status --short");
+    for (const line of statusOut.split("\n")) {
+      if (!line.trim()) continue;
+      const dir = line.slice(3).split("/")[0];
+      const key = repo.path + "/" + dir;
+      map[key] = (map[key] || 0) + 1;
+    }
+  }
+  return map;
+}
+
+export function cliCmd(cmd) {
   try {
     return execSync(cmd, {
-      cwd: repoPath, encoding: "utf8", timeout: 5000,
+      encoding: "utf8", timeout: 30_000,
+      env: { ...process.env, FORCE_COLOR: "1" },
     }).trim();
+  } catch { return "(error)"; }
+}
+
+export function gitCmd(repoPath, cmd) {
+  try {
+    return execSync(cmd, { cwd: repoPath, encoding: "utf8", timeout: 5000 }).trim();
   } catch { return ""; }
 }
 
-function ago(ms) {
+export function ago(ms) {
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s}s ago`;
   const m = Math.floor(s / 60);
@@ -264,6 +178,9 @@ function ago(ms) {
   const h = Math.floor(m / 60);
   return `${h}h ago`;
 }
+
+// Exported for compositor testing
+export { formatSection, guideSection, SECTION_NAMES };
 
 export const help = `Eclipse workspace dashboard — composite view of IDE state.
 
@@ -276,9 +193,11 @@ Sections (default: all):
   launches     running launches
   tests        recent test sessions
   projects     workspace projects with repo mapping
+  guide        usage guide (shown by default, suppressed by -q)
 
 Examples:
   jdt status                    full dashboard
   jdt status -q                 full dashboard, no guide
   jdt status editors errors     only editors + errors
-  jdt status git                only git state`;
+  jdt status git                only git state
+  jdt status guide              only usage guide`;
