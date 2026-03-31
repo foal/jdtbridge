@@ -27,11 +27,15 @@ If Eclipse is running, you will be prompted to stop it. After install, Eclipse r
 
 Run `jdt help <command>` for detailed flags and examples. Most commands have short aliases.
 
+### Dashboard
+
+```bash
+jdt status [sections...] [-q]                          # workspace overview (start here)
+```
+
 ### Search & navigation
 
 ```bash
-jdt projects                                           # list workspace projects
-jdt project-info <name> [--lines N]                    # (alias: pi) project overview
 jdt find <Name|package> [--source-only]                 # find types by name, wildcard, or package
 jdt references <FQMN> [--field <name>]                  # (alias: refs) references to type/method/field
 jdt subtypes <FQN>                                     # (alias: subt) all subtypes/implementors
@@ -108,8 +112,16 @@ Console output persists in Eclipse and is available via `launch logs` at any tim
 ### Editor
 
 ```bash
-jdt editors                                             # (alias: ed) list all open editors (absolute paths)
 jdt open <FQMN>                                        # open in Eclipse editor
+```
+
+### Workspace detail
+
+```bash
+jdt projects                                           # list workspace projects (name, location, repo)
+jdt project-info <name> [--lines N]                    # (alias: pi) project overview
+jdt editors                                            # (alias: ed) open editors (FQN, project, path)
+jdt git [list] [repo...] [--no-files]                  # git repos, branches, dirty state
 ```
 
 ## Instance discovery
