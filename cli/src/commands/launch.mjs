@@ -1,5 +1,6 @@
 import { get, getStream } from "../client.mjs";
 import { extractPositional, parseFlags } from "../args.mjs";
+import { formatTable } from "../format/table.mjs";
 
 export async function launchList() {
   const results = await get("/launch/list");
@@ -234,15 +235,6 @@ async function followLogs(name, args) {
   } catch {
     return 0;
   }
-}
-
-/** Format rows as aligned columns with headers. */
-function formatTable(headers, rows) {
-  const widths = headers.map((h, i) =>
-    Math.max(h.length, ...rows.map((r) => (r[i] || "").length)));
-  const pad = (s, w) => (s || "").padEnd(w);
-  const line = (cells) => cells.map((c, i) => pad(c, widths[i])).join("  ").trimEnd();
-  return [line(headers), ...rows.map(line)].join("\n");
 }
 
 export const launchRunHelp = `Launch a saved configuration.

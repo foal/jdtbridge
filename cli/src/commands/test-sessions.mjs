@@ -1,5 +1,6 @@
 import { get } from "../client.mjs";
-import { green, red, yellow, dim } from "../color.mjs";
+import { green, red, yellow } from "../color.mjs";
+import { formatTable } from "../format/table.mjs";
 
 /**
  * List active and completed test sessions.
@@ -14,20 +15,17 @@ export async function testSessions() {
     console.log("(no test sessions)");
     return;
   }
-  for (const s of results) {
-    const label = s.label || s.session;
-    const counts = formatCounts(s);
-    const time =
-      Number.isFinite(s.time) && s.time > 0
-        ? `${s.time.toFixed(1)}s`
-        : "";
+  const headers = ["SESSION", "LABEL", "TESTS", "RESULT", "TIME", "STATE"];
+  const rows = results.map((s) => {
     const state = s.state === "running"
       ? `running (${s.completed}/${s.total})`
       : s.state;
-    console.log(
-      `${s.session}  ${label}  ${s.total} tests  ${counts}  ${time}  ${state}`,
-    );
-  }
+    const time = Number.isFinite(s.time) && s.time > 0
+      ? `${s.time.toFixed(1)}s` : "";
+    const label = s.label && s.label !== s.session ? s.label : "";
+    return [s.session, label, `${s.total}`, formatCounts(s), time, state];
+  });
+  console.log(formatTable(headers, rows));
 }
 
 function formatCounts(s) {
