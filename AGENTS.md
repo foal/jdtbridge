@@ -50,14 +50,7 @@ verified by the main agent.**
    in one call. This is your orientation command — run it first to
    understand what the developer is working on.
 
-3. `jdt help` — read available commands. Use `jdt help <command>` for details.
-
-4. `jdt projects` — verify `io.github.kaluchi.jdtbridge` and
-   `io.github.kaluchi.jdtbridge.tests` are listed (imported into Eclipse
-   workspace). If missing: Eclipse → File → Import → Existing Projects
-   into Workspace → select repo root.
-
-5. Verify `jdtbridge.target` exists in repo root (gitignored, per-developer).
+3. Verify `jdtbridge.target` exists in repo root (gitignored, per-developer).
    Without it, Tycho builds fail. If missing, create it pointing to the
    local Eclipse directory:
    ```xml
