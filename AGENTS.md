@@ -157,13 +157,13 @@ See [README.md](README.md) for full overview. Key directories:
 
 ### `jdt build` vs full verify
 
-| | `jdt build` | `jdt launch run jdtbridge-verify` |
-|---|---|---|
-| What | Eclipse clean+full build (or `--incremental`) | Tycho full build (via Eclipse) |
-| Speed | 3-10 seconds (incremental: 1-3s) | 40-60 seconds |
-| Tests | No | Unit + integration |
-| Output | Compiled classes in Eclipse | p2 site in `site/target/` |
-| When | Quick iteration while coding | Before commit, before `jdt setup` |
+| | `jdt build` | `jdt launch run jdtbridge-package` | `jdt launch run jdtbridge-verify` |
+|---|---|---|---|
+| What | Eclipse clean+full build (or `--incremental`) | Tycho build, no tests | Tycho full build + tests |
+| Speed | 3-10 seconds (incremental: 1-3s) | 30-40 seconds | 40-60 seconds |
+| Tests | No | No | Unit + integration |
+| Output | Compiled classes in Eclipse | p2 site in `site/target/` | p2 site in `site/target/` |
+| When | Quick iteration while coding | Before `jdt setup --skip-build` | Before commit |
 
 Console output is captured by Eclipse and available via `jdt launch logs`.
 Use `-f` to stream live, or inspect afterwards with `--tail`. Example:
@@ -235,7 +235,51 @@ gh pr merge 55 --squash --delete-branch
 - **Integration tests:** full Tycho build only (`jdt launch run jdtbridge-verify`) — use `@EnabledIfSystemProperty(named = "jdtbridge.integration-tests", matches = "true")`
 - **Test fixture:** `TestFixture.java` creates a project with known classes —
   `test.model.Animal`, `Dog`, `Cat`, `test.edge.Calculator` (overloads),
-  `Repository` (generics). Add new test types there.
+  `Repository` (generics), `test.edge.Color` (enum), `test.edge.Marker`
+  (annotation). Add new test types there.
+
+### Running plugin tests
+
+**Prefer running individual test classes or methods**, not the full suite.
+Full suite (615+ tests) takes ~4 minutes and runs in a separate Eclipse
+runtime. Individual tests take 5-15 seconds.
+
+```bash
+# Single test method — fastest feedback
+jdt test run com.example.FooTest#myMethod -f -q
+
+# Single test class
+jdt test run com.example.FooTest -f -q
+
+# Full suite — only before commit or when unsure what broke
+jdt test run --project io.github.kaluchi.jdtbridge.tests -f -q
+```
+
+Important:
+- **Plugin tests run in a PDE test runtime** with workspace bundles
+  (not the installed plugin). `jdt build` is enough — no `jdt setup`
+  needed before running tests.
+- **But `jdt setup` IS needed** to test live behavior (e.g. `jdt find`,
+  `jdt hier`) because those go through the installed plugin's HTTP server.
+- **Build before testing:** `jdt build --project io.github.kaluchi.jdtbridge.tests`
+  — otherwise new test classes won't be found.
+- **TestFixture lifecycle:** each test class needs `@BeforeAll static void
+  setUp() throws Exception { TestFixture.create(); }`. The fixture is
+  idempotent but must be created before `JdtUtils.findType()` calls.
+  If a `@Nested` class has `@AfterAll` with `TestFixture.destroy()`,
+  subsequent nested classes in the same file won't find fixture types.
+- **Check results:** `jdt test sessions` shows all runs with relative time.
+  `jdt test status <session> -f` for details on failures.
+
+### Running CLI tests
+
+```bash
+cd cli && npm test                    # full suite (~13s, 470+ tests)
+cd cli && npx vitest run test/paths.test.mjs   # single file
+```
+
+CLI tests mock the HTTP server — no Eclipse needed. They run on both
+Windows and Linux (CI). Path conversion tests mock `process.platform`.
 
 ## Releasing
 
