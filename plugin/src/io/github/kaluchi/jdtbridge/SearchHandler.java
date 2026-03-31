@@ -43,7 +43,12 @@ class SearchHandler {
         for (var p : ResourcesPlugin.getWorkspace().getRoot()
                 .getProjects()) {
             if (p.isOpen() && !p.getName().startsWith(".")) {
-                arr.add(p.getName());
+                var obj = new JsonObject();
+                obj.addProperty("name", p.getName());
+                var loc = p.getLocation();
+                obj.addProperty("location",
+                        loc != null ? loc.toOSString() : "");
+                arr.add(obj);
             }
         }
         return arr.toString();

@@ -45,6 +45,7 @@ import {
   agentLogsHelp,
   agentProvidersHelp,
 } from "./commands/agent.mjs";
+import { status, help as statusHelp } from "./commands/status.mjs";
 import {
   launchList,
   launchConfigs,
@@ -197,6 +198,7 @@ const commands = {
   move: { fn: move, help: moveHelp },
   editors: { fn: editors, help: editorsHelp },
   open: { fn: open, help: openHelp },
+  status: { fn: status, help: statusHelp },
   launch: { fn: launchDispatch, help: launchHelp },
   agent: { fn: agentDispatch, help: agentHelp },
   setup: { fn: setup, help: setupHelp },

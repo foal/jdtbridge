@@ -43,7 +43,8 @@ class EditorHandler {
                 var arr = new JsonArray();
                 if (active != null) {
                     addEditorEntry(
-                            active.getEditorInput(), arr);
+                            active.getEditorInput(), arr,
+                            true);
                 }
                 for (IEditorReference ref : refs) {
                     IEditorPart editor =
@@ -52,7 +53,8 @@ class EditorHandler {
                         continue;
                     try {
                         addEditorEntry(
-                                ref.getEditorInput(), arr);
+                                ref.getEditorInput(), arr,
+                                false);
                     } catch (Exception ignored) {
                     }
                 }
@@ -74,13 +76,29 @@ class EditorHandler {
 
     private void addEditorEntry(
             org.eclipse.ui.IEditorInput input,
-            JsonArray arr) {
+            JsonArray arr, boolean isActive) {
         if (!(input instanceof IFileEditorInput fi)) return;
         IFile file = fi.getFile();
         if (file.getLocation() == null) return;
         var obj = new JsonObject();
         obj.addProperty("file",
                 file.getLocation().toOSString());
+        obj.addProperty("project",
+                file.getProject().getName());
+        if (isActive) obj.addProperty("active", true);
+        // FQN for Java files
+        try {
+            var javaElement = org.eclipse.jdt.core.JavaCore
+                    .create(file);
+            if (javaElement instanceof org.eclipse.jdt.core
+                    .ICompilationUnit cu) {
+                var types = cu.getTypes();
+                if (types.length > 0) {
+                    obj.addProperty("fqn",
+                            types[0].getFullyQualifiedName());
+                }
+            }
+        } catch (Exception ignored) { }
         arr.add(obj);
     }
 
