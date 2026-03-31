@@ -244,6 +244,10 @@ function printOverview() {
   console.log(`Eclipse JDT Bridge — semantic Java analysis via Eclipse JDT SearchEngine.
 Requires: Eclipse running with the jdtbridge plugin.
 
+Dashboard:
+  status [sections...] [-q]                   workspace dashboard (git, editors, errors, launches, tests, projects)
+  git [list] [repo...] [--no-files]           git repos, branches, dirty state
+
 Search & navigation:
   projects                                    list workspace projects
   project-info${fmtAliases("project-info")} <name> [--lines N]             project overview (adaptive detail)
@@ -284,7 +288,7 @@ Launches:
   launch clear [name]                         remove terminated launches
 
 Editor:
-  editors${fmtAliases("editors")}                                    list open editors (absolute paths)
+  editors${fmtAliases("editors")}                                    list open editors (FQN, project, path)
   open <FQMN>                                 open in Eclipse editor
 
 Agents:

@@ -122,7 +122,12 @@ Specialized refresh after editing code:
   jdt errors                  check compilation after edit
   jdt errors --project X      check one project only (faster)
   jdt test run FQN -f -q      run one test, stream result
-  jdt build --project X       trigger build if auto-build is off`,
+  jdt build --project X       trigger build if auto-build is off
+
+For full command reference:
+
+  jdt help                    all available commands
+  jdt help <command>          detailed usage for a command`,
   };
 }
 

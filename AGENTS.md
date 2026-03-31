@@ -45,15 +45,19 @@ verified by the main agent.**
    - Plugin not installed → `jdt setup --eclipse <path>`
    - Eclipse not running → start it, re-run check
 
-2. `jdt help` — read available commands. Use `jdt help <command>` for details.
+2. `jdt status` — **workspace dashboard**. Shows git repos, open editors,
+   compilation errors, running launches, test results, and project list
+   in one call. This is your orientation command — run it first to
+   understand what the developer is working on.
 
-3. `jdt projects` — verify `io.github.kaluchi.jdtbridge` and
+3. `jdt help` — read available commands. Use `jdt help <command>` for details.
+
+4. `jdt projects` — verify `io.github.kaluchi.jdtbridge` and
    `io.github.kaluchi.jdtbridge.tests` are listed (imported into Eclipse
    workspace). If missing: Eclipse → File → Import → Existing Projects
    into Workspace → select repo root.
-   Note: `jdt projects` only shows Java/plugin projects, not branding/feature/site.
 
-4. Verify `jdtbridge.target` exists in repo root (gitignored, per-developer).
+5. Verify `jdtbridge.target` exists in repo root (gitignored, per-developer).
    Without it, Tycho builds fail. If missing, create it pointing to the
    local Eclipse directory:
    ```xml

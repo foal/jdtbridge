@@ -60,13 +60,12 @@ https://kaluchi.github.io/jdtbridge/
 ### Test drive
 
 ```bash
-jdt projects        # list workspace projects
-jdt help            # explore available commands
+jdt status          # workspace dashboard — git, editors, errors, launches, tests, projects
 ```
 
 Now introduce it to your AI agent:
 
-> We're working together in Eclipse via the `jdt` CLI — you can see the same projects, source code, compilation errors, and test results that I see in the IDE. We share the same workspace. Run `jdt help` to learn what's available and remember it for future use.
+> We're working together in Eclipse via the `jdt` CLI — you can see the same projects, source code, compilation errors, and test results that I see in the IDE. We share the same workspace. Run `jdt status` to see what I'm working on right now.
 
 ## Why CLI, not MCP?
 
