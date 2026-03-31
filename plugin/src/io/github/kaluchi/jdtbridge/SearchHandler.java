@@ -48,6 +48,18 @@ class SearchHandler {
                 var loc = p.getLocation();
                 obj.addProperty("location",
                         loc != null ? loc.toOSString() : "");
+                // Git repo info via EGit
+                var mapping = org.eclipse.egit.core.project
+                        .RepositoryMapping.getMapping(p);
+                if (mapping != null) {
+                    var repo = mapping.getRepository();
+                    obj.addProperty("repo",
+                            repo.getWorkTree().getAbsolutePath());
+                    try {
+                        obj.addProperty("branch",
+                                repo.getBranch());
+                    } catch (Exception ignored) { }
+                }
                 arr.add(obj);
             }
         }

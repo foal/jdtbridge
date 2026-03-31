@@ -16,5 +16,11 @@
             <repository location="https://download.eclipse.org/technology/m2e/releases/latest/"/>
             <unit id="org.eclipse.m2e.feature.feature.group" version="0.0.0"/>
         </location>
+        <location includeAllPlatforms="false" includeConfigurePhase="true"
+                  includeMode="planner" includeSource="false"
+                  type="InstallableUnit">
+            <repository location="https://download.eclipse.org/egit/updates/"/>
+            <unit id="org.eclipse.egit.feature.group" version="0.0.0"/>
+        </location>
     </locations>
 </target>

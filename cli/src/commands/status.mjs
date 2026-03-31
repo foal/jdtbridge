@@ -9,8 +9,7 @@
  */
 
 import { execSync, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { dirname, basename, resolve } from "node:path";
+import { dirname, basename } from "node:path";
 import { get } from "../client.mjs";
 import { toSandboxPath } from "../paths.mjs";
 import { formatTable } from "../format/table.mjs";
@@ -47,24 +46,22 @@ const RENDERERS = {
 };
 
 async function renderGit() {
-  // Get project locations to discover repos
   const projects = await get("/projects");
-  if (projects.error) return "## Git\n\n(unavailable)";
+  if (projects.error) return "## Git\n\n$ jdt git\n(unavailable)";
 
-  const repos = discoverRepos(projects);
+  const repos = reposFromServer(projects);
   const lines = ["## Git", "", "$ jdt git"];
 
   const headers = ["REPO", "BRANCH", "STATUS"];
   const repoRows = [];
 
   for (const repo of repos) {
-    const branch = gitCmd(repo.path, "git branch --show-current") || "unknown";
+    const repoPath = toSandboxPath(repo.path);
     const statusOut = gitCmd(repo.path, "git status --short") || "";
     const dirty = statusOut.split("\n").filter((l) => l.trim()).length;
     const status = dirty > 0 ? `${dirty} modified` : "clean";
-    repoRows.push([toSandboxPath(repo.path), branch, status]);
+    repoRows.push([repoPath, repo.branch, status]);
 
-    // Show modified files for small diffs, truncate for large
     if (dirty > 0 && dirty <= 10) {
       repoRows.push(...statusOut.split("\n").filter((l) => l.trim())
         .map((l) => ["  " + l.trim(), "", ""]));
@@ -170,7 +167,7 @@ async function renderProjects() {
   if (projects.error) { lines.push(projects.error); return lines.join("\n"); }
   if (projects.length === 0) { lines.push("(no projects)"); return lines.join("\n"); }
 
-  const repos = discoverRepos(projects);
+  const repos = reposFromServer(projects);
 
   // Get dirty file counts per project dir
   const dirtyMap = {};
@@ -232,24 +229,21 @@ function renderHelp() {
 
 // ---- Helpers ----
 
-function discoverRepos(projects) {
+/** Extract unique repos from server /projects response (EGit data). */
+function reposFromServer(projects) {
   const seen = new Map();
   for (const p of projects) {
-    const loc = (typeof p === "string" ? "" : (p.location || "")).replace(/\\/g, "/");
-    if (!loc) continue;
-    // Walk up to find .git
-    let dir = dirname(loc);
-    while (dir && dir !== dirname(dir)) {
-      const gitDir = dir.replace(/\//g, "\\") + "\\.git";
-      if (existsSync(gitDir) || existsSync(dir + "/.git")) {
-        if (!seen.has(dir)) {
-          seen.set(dir, { path: dir, name: basename(dir), projects: [] });
-        }
-        seen.get(dir).projects.push(typeof p === "string" ? p : p.name);
-        break;
-      }
-      dir = dirname(dir);
+    const repo = (p.repo || "").replace(/\\/g, "/");
+    if (!repo) continue;
+    if (!seen.has(repo)) {
+      seen.set(repo, {
+        path: repo,
+        name: basename(repo),
+        branch: p.branch || "",
+        projects: [],
+      });
     }
+    seen.get(repo).projects.push(p.name);
   }
   return [...seen.values()];
 }
