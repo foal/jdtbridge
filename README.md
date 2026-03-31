@@ -7,6 +7,10 @@ Eclipse's JDT compiler builds a deep semantic index of your code — type hierar
 ## Why it matters
 
 ```bash
+# See what the developer sees — git branches, open editors, errors,
+# running launches, test results, all projects. One command, one call.
+jdt status
+
 # "Who calls this method?" — grep returns 200 hits including comments,
 # identically-named methods in other classes, and string literals.
 # JDT returns only the 8 actual call sites, with file and line numbers.
@@ -105,8 +109,7 @@ Most commands have short aliases for quick typing.
 
 | Command | Alias | Eclipse | What it does |
 |---------|-------|---------|-------------|
-| `projects` | | | List workspace projects |
-| `project-info <name>` | `pi` | | Project overview (packages, types, methods) |
+| `status [sections...] [-q]` | | Prt Scr | Workspace dashboard — start here |
 | `find <Name\|package>` | | Ctrl+Shift+T | Find types by name, wildcard, or package |
 | `references <FQMN>` | `refs` | Ctrl+Shift+G | All references to a type, method, or field |
 | `subtypes <FQN>` | `subt` | F4 | All subtypes and implementors |
@@ -124,7 +127,6 @@ Most commands have short aliases for quick typing.
 | `rename <FQMN> <new>` | | Alt+Shift+R | Rename type, method, or field across workspace |
 | `move <FQN> <package>` | | Alt+Shift+V | Move type to another package |
 | `open <FQMN>` | | F3 | Open in Eclipse editor |
-| `editors` | `ed` | Ctrl+E | List all open editors (absolute paths) |
 | `launch list` | | | List launches (running + terminated) |
 | `launch configs` | | | List saved launch configurations (MRU order) |
 | `launch run <config> [-f] [-q]` | | | Launch a configuration (`-f` to stream) |
@@ -132,6 +134,10 @@ Most commands have short aliases for quick typing.
 | `launch logs <name> [-f]` | | | Show console output (`-f` to stream) |
 | `launch stop <name>` | | Ctrl+F2 | Stop a running launch |
 | `launch clear [name]` | | | Remove terminated launches |
+| `projects` | | | List workspace projects (name, location, repo) |
+| `project-info <name>` | `pi` | | Project overview (packages, types, methods) |
+| `editors` | `ed` | Ctrl+E | Open editor tabs (FQN, project, path) |
+| `git [list] [repo...]` | | | Git repos, branches, dirty state |
 | `setup [--check\|--remove]` | | | Install, check, or remove Eclipse plugin |
 
 Run `jdt help <command>` for detailed flags and options.

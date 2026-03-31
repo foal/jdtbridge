@@ -245,12 +245,9 @@ function printOverview() {
 Requires: Eclipse running with the jdtbridge plugin.
 
 Dashboard:
-  status [sections...] [-q]                   workspace dashboard (git, editors, errors, launches, tests, projects)
-  git [list] [repo...] [--no-files]           git repos, branches, dirty state
+  status [sections...] [-q]                   workspace overview (start here)
 
 Search & navigation:
-  projects                                    list workspace projects
-  project-info${fmtAliases("project-info")} <name> [--lines N]             project overview (adaptive detail)
   find <Name|*Pattern*|pkg> [--source-only]   find types by name, wildcard, or package
   references${fmtAliases("references")} <FQMN> [--field <name>]         references to type/method/field
   subtypes${fmtAliases("subtypes")} <FQN>                              all subtypes/implementors
@@ -288,8 +285,13 @@ Launches:
   launch clear [name]                         remove terminated launches
 
 Editor:
-  editors${fmtAliases("editors")}                                    list open editors (FQN, project, path)
   open <FQMN>                                 open in Eclipse editor
+
+Workspace detail:
+  projects                                    list workspace projects (name, location, repo)
+  project-info${fmtAliases("project-info")} <name> [--lines N]             project overview (adaptive detail)
+  editors${fmtAliases("editors")}                                    list open editors (FQN, project, path)
+  git [list] [repo...] [--no-files]           git repos, branches, dirty state
 
 Agents:
   agent run <provider> <agent> [--name <id>]  launch agent session
