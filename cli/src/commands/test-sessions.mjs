@@ -15,15 +15,22 @@ export async function testSessions() {
     console.log("(no test sessions)");
     return;
   }
-  const headers = ["SESSION", "LABEL", "TESTS", "RESULT", "TIME", "STATE"];
+  const now = Date.now();
+  const headers = ["SESSION", "LABEL", "TESTS", "RESULT", "TIME", "STATUS"];
   const rows = results.map((s) => {
-    const state = s.state === "running"
-      ? `running (${s.completed}/${s.total})`
-      : s.state;
     const time = Number.isFinite(s.time) && s.time > 0
       ? `${s.time.toFixed(1)}s` : "";
     const label = s.label && s.label !== s.session ? s.label : "";
-    return [s.session, label, `${s.total}`, formatCounts(s), time, state];
+    const tsMatch = s.session.match(/-(\d{13})$/);
+    const startMs = tsMatch ? Number(tsMatch[1]) : 0;
+    let status;
+    if (s.state === "running") {
+      status = startMs ? `running, started ${ago(now - startMs)}` : "running";
+    } else {
+      const endMs = startMs && s.time > 0 ? startMs + s.time * 1000 : 0;
+      status = endMs ? `finished ${ago(now - endMs)}` : "finished";
+    }
+    return [s.session, label, `${s.total}`, formatCounts(s), time, status];
   });
   console.log(formatTable(headers, rows));
 }
@@ -35,6 +42,15 @@ function formatCounts(s) {
   if (s.errors > 0) parts.push(red(`${s.errors} errors`));
   if (s.ignored > 0) parts.push(yellow(`${s.ignored} ign`));
   return parts.join(", ");
+}
+
+function ago(ms) {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return `${h}h ago`;
 }
 
 export const help = `List active and completed test sessions.
