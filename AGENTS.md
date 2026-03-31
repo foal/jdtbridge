@@ -74,13 +74,16 @@ usage of any command. Key examples:
 
 ```bash
 jdt status                       # CLI screenshot of Eclipse (start here)
-jdt find <Name>                  # find types (KIND, FQN, ORIGIN table)
+jdt find <Name>                  # find type declarations (KIND, FQN, ORIGIN)
 jdt refs <FQMN>                  # find call sites (not string matches)
 jdt source <FQMN>               # source + resolved references (hypertext navigation)
 jdt type-info <FQN>              # class overview without reading 600 lines
 jdt test run <FQN>#<method> -f   # run one test, stream progress
 jdt errors --project <name>      # instant compilation check
 jdt build --project <name>       # clean build (default, reliable)
+jdt build --project <name> --incremental  # fast incremental (1-3s)
+jdt refresh <file>               # explicitly notify Eclipse of file changes
+jdt maven update --project <name> -f  # update Maven project (Alt+F5)
 jdt git                          # git repos, branches, dirty state
 ```
 
@@ -161,7 +164,7 @@ See [README.md](README.md) for full overview. Key directories:
 | | `jdt build` | `jdt launch run jdtbridge-package` | `jdt launch run jdtbridge-verify` |
 |---|---|---|---|
 | What | Eclipse clean+full build (or `--incremental`) | Tycho build, no tests | Tycho full build + tests |
-| Speed | 3-10 seconds (incremental: 1-3s) | 30-40 seconds | 40-60 seconds |
+| Speed | 3-10 seconds (incremental: 1-3s) | 30-40 seconds | ~5 minutes |
 | Tests | No | No | Unit + integration |
 | Output | Compiled classes in Eclipse | p2 site in `site/target/` | p2 site in `site/target/` |
 | When | Quick iteration while coding | Before `jdt setup --skip-build` | Before commit |
