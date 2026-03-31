@@ -165,7 +165,7 @@ export function cliCmd(cmd) {
     return execSync(cmd, {
       encoding: "utf8", timeout: 30_000,
       env: { ...process.env, FORCE_COLOR: "1" },
-    }).trim();
+    }).replace(/\n+$/, "");
   } catch { return "(error)"; }
 }
 

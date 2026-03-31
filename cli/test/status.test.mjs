@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   formatSection, guideSection, reposFromServer,
-  buildDirtyMap, ago, SECTION_NAMES,
+  buildDirtyMap, ago, cliCmd, SECTION_NAMES,
 } from "../src/commands/status.mjs";
 
 // ---- formatSection ----
@@ -229,6 +229,30 @@ describe("buildDirtyMap", () => {
     // Non-existent repo path — gitCmd returns ""
     const repos = [{ path: "/nonexistent/repo", name: "r", branch: "m", projects: [] }];
     expect(buildDirtyMap(repos)).toEqual({});
+  });
+});
+
+// ---- cliCmd ----
+
+describe("cliCmd", () => {
+  it("preserves leading whitespace", () => {
+    const out = cliCmd("echo    hello");
+    expect(out).toContain("hello");
+  });
+
+  it("strips trailing newlines", () => {
+    const out = cliCmd("echo hello");
+    expect(out).not.toMatch(/\n$/);
+  });
+
+  it("preserves leading spaces in output", () => {
+    const out = cliCmd("node -e \"process.stdout.write('   indented')\"");
+    expect(out).toBe("   indented");
+  });
+
+  it("returns (error) on failure", () => {
+    const out = cliCmd("nonexistent-command-xyz-12345");
+    expect(out).toBe("(error)");
   });
 });
 
