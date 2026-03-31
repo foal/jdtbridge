@@ -596,7 +596,7 @@ describe("commands (integration)", () => {
 
   // ---- launch ----
 
-  it("launch list shows launches", async () => {
+  it("launch list shows launches as table", async () => {
     await setupMock((req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify([
@@ -606,10 +606,13 @@ describe("commands (integration)", () => {
     });
     const { launchList } = await import("../src/commands/launch.mjs");
     await launchList();
-    expect(io.logs[0]).toContain("my-server");
-    expect(io.logs[0]).toContain("running");
-    expect(io.logs[1]).toContain("ObjectMapperTest");
-    expect(io.logs[1]).toContain("terminated");
+    const out = io.logs[0];
+    expect(out).toContain("NAME");
+    expect(out).toContain("STATUS");
+    expect(out).toContain("my-server");
+    expect(out).toContain("running");
+    expect(out).toContain("ObjectMapperTest");
+    expect(out).toContain("terminated (0)");
   });
 
   it("launch list empty", async () => {
@@ -661,7 +664,7 @@ describe("commands (integration)", () => {
     expect(io.logs[0]).toContain("last line");
   });
 
-  it("launch configs shows configurations", async () => {
+  it("launch configs shows configurations as table", async () => {
     await setupMock((req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify([
@@ -671,9 +674,13 @@ describe("commands (integration)", () => {
     });
     const { launchConfigs } = await import("../src/commands/launch.mjs");
     await launchConfigs();
-    expect(io.logs[0]).toContain("my-server");
-    expect(io.logs[0]).toContain("Java Application");
-    expect(io.logs[1]).toContain("AllTests");
+    const out = io.logs[0];
+    expect(out).toContain("NAME");
+    expect(out).toContain("TYPE");
+    expect(out).toContain("my-server");
+    expect(out).toContain("Java Application");
+    expect(out).toContain("AllTests");
+    expect(out).toContain("JUnit");
   });
 
   it("launch configs empty", async () => {

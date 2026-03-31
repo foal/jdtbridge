@@ -11,14 +11,14 @@ export async function launchList() {
     console.log("(no launches)");
     return;
   }
-  for (const r of results) {
+  const rows = results.map((r) => {
     const status = r.terminated
       ? `terminated${r.exitCode !== undefined ? ` (${r.exitCode})` : ""}`
       : "running";
-    const parts = [r.name, r.type, r.mode, status];
-    if (r.pid) parts.push(`pid:${r.pid}`);
-    console.log(parts.join("  "));
-  }
+    return [r.name, r.type, r.mode, status, r.pid ? `${r.pid}` : ""];
+  });
+  const headers = ["NAME", "TYPE", "MODE", "STATUS", "PID"];
+  console.log(formatTable(headers, rows));
 }
 
 export async function launchConfigs() {
@@ -31,9 +31,9 @@ export async function launchConfigs() {
     console.log("(no launch configurations)");
     return;
   }
-  for (const r of results) {
-    console.log(`${r.name}  ${r.type}`);
-  }
+  const rows = results.map((r) => [r.name, r.type]);
+  const headers = ["NAME", "TYPE"];
+  console.log(formatTable(headers, rows));
 }
 
 export async function launchClear(args) {
@@ -234,6 +234,15 @@ async function followLogs(name, args) {
   } catch {
     return 0;
   }
+}
+
+/** Format rows as aligned columns with headers. */
+function formatTable(headers, rows) {
+  const widths = headers.map((h, i) =>
+    Math.max(h.length, ...rows.map((r) => (r[i] || "").length)));
+  const pad = (s, w) => (s || "").padEnd(w);
+  const line = (cells) => cells.map((c, i) => pad(c, widths[i])).join("  ").trimEnd();
+  return [line(headers), ...rows.map(line)].join("\n");
 }
 
 export const launchRunHelp = `Launch a saved configuration.
