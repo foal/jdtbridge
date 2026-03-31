@@ -68,20 +68,20 @@ verified by the main agent.**
 **Prefer `jdt` over grep/glob for Java-specific queries.** Grep returns
 string matches; `jdt` returns semantic results from Eclipse's compiler index.
 
-Run `jdt help` for the full command list. Run `jdt help <command>` for
-detailed usage of any command. Key examples:
+`jdt status` shows the full workspace state. `jdt status guide` lists
+all sections and refresh commands. `jdt help <command>` for detailed
+usage of any command. Key examples:
 
 ```bash
+jdt status                       # CLI screenshot of Eclipse (start here)
+jdt find <Name>                  # find types (KIND, FQN, ORIGIN table)
 jdt refs <FQMN>                  # find call sites (not string matches)
 jdt source <FQMN>               # source + resolved references (hypertext navigation)
 jdt type-info <FQN>              # class overview without reading 600 lines
 jdt test run <FQN>#<method> -f   # run one test, stream progress
-jdt test run <FQN> --project <name> -f  # run with specific project classpath
 jdt errors --project <name>      # instant compilation check
 jdt build --project <name>       # clean build (default, reliable)
-jdt build --project <name> --incremental  # fast incremental (1-3s)
-jdt refresh <file>               # explicitly notify Eclipse of file changes
-jdt maven update --project <name> -f  # update Maven project (Alt+F5)
+jdt git                          # git repos, branches, dirty state
 ```
 
 ### `jdt source` — hypertext navigation
@@ -94,7 +94,7 @@ References are grouped by:
 - **Project source** — with absolute paths and javadoc
 - **Dependencies** — bare FQMNs
 
-All paths are absolute filesystem paths, usable with Read/Edit tools.
+All paths are absolute OS paths (converted via `toSandboxPath` in Docker sandbox).
 
 ### FQMN (Fully Qualified Method Name)
 
@@ -146,8 +146,12 @@ jdt is already verified by the main agent.
 
 See [README.md](README.md) for full overview. Key directories:
 - `cli/src/` — Node.js CLI (ESM, `.mjs`)
-- `plugin/src/` — Eclipse plugin (Java, OSGi)
+- `cli/src/commands/` — command implementations (status, find, source, git, etc.)
+- `cli/src/format/` — output formatters (table, hierarchy, references, etc.)
+- `cli/test/` — CLI tests (vitest, 515+ tests)
+- `plugin/src/` — Eclipse plugin (Java, OSGi, EGit, JGit)
 - `plugin.tests/src/` — Plugin tests (JUnit 5, Fragment-Host of plugin)
+- `ui/` — Eclipse UI contributions (toolbar, preferences)
 - `scripts/release.mjs` — release automation
 
 ## Development workflow
@@ -271,7 +275,7 @@ Important:
 ### Running CLI tests
 
 ```bash
-cd cli && npm test                    # full suite (~13s, 470+ tests)
+cd cli && npm test                    # full suite (~13s, 515+ tests)
 cd cli && npx vitest run test/paths.test.mjs   # single file
 ```
 
