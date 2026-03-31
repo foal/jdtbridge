@@ -612,7 +612,9 @@ public class SearchIntegrationTest {
         JsonArray arr = parseArray(json);
         boolean found = false;
         for (JsonElement e : arr) {
-            if (e.getAsString().equals(TestFixture.PROJECT_NAME)) {
+            var obj = e.getAsJsonObject();
+            if (obj.get("name").getAsString()
+                    .equals(TestFixture.PROJECT_NAME)) {
                 found = true;
                 break;
             }
