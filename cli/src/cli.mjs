@@ -245,7 +245,7 @@ function printOverview() {
 Requires: Eclipse running with the jdtbridge plugin.
 
 Dashboard:
-  status [sections...] [-q]                   workspace overview (start here)
+  status [sections...] [-q]                   CLI screenshot of Eclipse (start here)
 
 Search & navigation:
   find <Name|*Pattern*|pkg> [--source-only]   find types by name, wildcard, or package

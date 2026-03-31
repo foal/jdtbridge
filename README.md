@@ -7,7 +7,7 @@ Eclipse's JDT compiler builds a deep semantic index of your code — type hierar
 ## Why it matters
 
 ```bash
-# See what the developer sees — git branches, open editors, errors,
+# CLI screenshot of Eclipse — git branches, open editors, errors,
 # running launches, test results, all projects. One command, one call.
 jdt status
 
@@ -109,7 +109,7 @@ Most commands have short aliases for quick typing.
 
 | Command | Alias | Eclipse | What it does |
 |---------|-------|---------|-------------|
-| `status [sections...] [-q]` | | Prt Scr | Workspace dashboard — start here |
+| `status [sections...] [-q]` | | Prt Scr | CLI screenshot of Eclipse — start here |
 | `find <Name\|package>` | | Ctrl+Shift+T | Find types by name, wildcard, or package |
 | `references <FQMN>` | `refs` | Ctrl+Shift+G | All references to a type, method, or field |
 | `subtypes <FQN>` | `subt` | F4 | All subtypes and implementors |
