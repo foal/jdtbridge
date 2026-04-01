@@ -13,6 +13,7 @@ import { agentsDir, sessionsDir } from "../home.mjs";
 import { discoverInstances } from "../discovery.mjs";
 import { bold, dim, red, green } from "../color.mjs";
 import { parseFlags } from "../args.mjs";
+import { output } from "../output.mjs";
 
 // Provider registry — lazy imports to avoid loading Docker deps when unused.
 const providers = {
@@ -103,39 +104,49 @@ async function runFromSession(sessionId, agentArgs) {
 
 // ---- list ----
 
-export async function agentList() {
+export async function agentList(args = []) {
   const sessions = readSessions();
 
-  if (sessions.length === 0) {
-    console.log("(no agent sessions)");
-    return;
-  }
-
-  console.log(
-    bold("NAME".padEnd(35)) +
-    "PROVIDER".padEnd(12) +
-    "AGENT".padEnd(12) +
-    "STATUS".padEnd(12) +
-    "STARTED",
-  );
-
+  // Build structured data, clean up stale sessions
+  const data = [];
   for (const sess of sessions) {
     const alive = isAlive(sess);
-    const status = alive ? green("running") : red("stopped");
-    const started = new Date(sess.startedAt).toLocaleString();
-    console.log(
-      sess.name.padEnd(35) +
-      (sess.provider || "?").padEnd(12) +
-      (sess.agent || "?").padEnd(12) +
-      status.padEnd(12 + (status.length - (alive ? 7 : 7))) +
-      dim(started),
-    );
-
-    // Clean up stale session files
+    data.push({
+      name: sess.name,
+      provider: sess.provider || null,
+      agent: sess.agent || null,
+      status: alive ? "running" : "stopped",
+      pid: sess.pid || null,
+      startedAt: sess.startedAt || null,
+    });
     if (!alive) {
       try { unlinkSync(sess._file); } catch { /* ignore */ }
     }
   }
+
+  output(args, data, {
+    empty: "(no agent sessions)",
+    text(data) {
+      console.log(
+        bold("NAME".padEnd(35)) +
+        "PROVIDER".padEnd(12) +
+        "AGENT".padEnd(12) +
+        "STATUS".padEnd(12) +
+        "STARTED",
+      );
+      for (const d of data) {
+        const status = d.status === "running" ? green("running") : red("stopped");
+        const started = d.startedAt ? new Date(d.startedAt).toLocaleString() : "";
+        console.log(
+          d.name.padEnd(35) +
+          (d.provider || "?").padEnd(12) +
+          (d.agent || "?").padEnd(12) +
+          status.padEnd(12 + (status.length - 7)) +
+          dim(started),
+        );
+      }
+    },
+  });
 }
 
 // ---- stop ----
@@ -390,6 +401,11 @@ Examples:
 `;
 
 export const agentListHelp = `List agent sessions.
+
+Usage:  jdt agent list [--json]
+
+Options:
+  --json    output as JSON
 
 Usage:  jdt agent list
 

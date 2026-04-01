@@ -16,11 +16,28 @@ import { basename } from "node:path";
 const SECTION_NAMES = ["intro", "git", "editors", "errors", "launches", "tests", "projects", "guide"];
 
 export async function status(args) {
+  const jsonFlag = args.includes("--json");
   const quiet = args.includes("-q") || args.includes("--quiet");
   const requested = args.filter((a) => !a.startsWith("-"));
   const sections = requested.length > 0
     ? requested.filter((s) => SECTION_NAMES.includes(s))
     : SECTION_NAMES.filter((s) => s !== "guide");
+
+  if (jsonFlag) {
+    const dataSections = sections.filter((s) => s !== "intro" && s !== "guide");
+    const result = {};
+    for (const name of dataSections) {
+      const cmd = JSON_COMMANDS[name];
+      if (!cmd) continue;
+      try {
+        result[name] = JSON.parse(cliCmd(cmd));
+      } catch {
+        result[name] = null;
+      }
+    }
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
 
   const results = [];
 
@@ -54,6 +71,16 @@ function formatSection({ title, cmd, body }, single) {
   return `## ${title}\n\n\`\`\`bash\n$ ${cmd}\n${body}\n\`\`\``;
 }
 
+/** JSON commands for --json composite output. */
+const JSON_COMMANDS = {
+  git: "jdt git --json",
+  editors: "jdt editors --json",
+  errors: "jdt errors --json",
+  launches: "jdt launch list --json",
+  tests: "jdt test sessions --json",
+  projects: "jdt projects --json",
+};
+
 // ---- Renderers (return { title, cmd, body }) ----
 
 const RENDERERS = {
@@ -74,7 +101,7 @@ async function renderEditors() {
 }
 
 async function renderErrors() {
-  return { title: "Errors", cmd: "jdt errors", body: cliCmd("jdt errors") };
+  return { title: "Errors", cmd: "jdt errors --json", body: cliCmd("jdt errors --json") };
 }
 
 async function renderLaunches() {
@@ -218,11 +245,11 @@ export function ago(ms) {
 }
 
 // Exported for compositor testing
-export { formatSection, guideSection, SECTION_NAMES };
+export { formatSection, guideSection, SECTION_NAMES, JSON_COMMANDS };
 
 export const help = `CLI screenshot of Eclipse — composite view of IDE state.
 
-Usage:  jdt status [sections...] [-q]
+Usage:  jdt status [sections...] [-q] [--json]
 
 Sections (default: all):
   intro        context for AI agents (shown by default, suppressed by -q)
@@ -234,10 +261,15 @@ Sections (default: all):
   projects     workspace projects with repo mapping
   guide        usage guide (shown by default, suppressed by -q)
 
+Options:
+  --json       composite JSON of all data sections
+
 Examples:
   jdt status                    full dashboard
   jdt status -q                 full dashboard, no intro/guide
   jdt status intro              only intro
   jdt status editors errors     only editors + errors
   jdt status git                only git state
-  jdt status guide              only usage guide`;
+  jdt status guide              only usage guide
+  jdt status --json             all sections as JSON
+  jdt status errors --json      single section as JSON`;

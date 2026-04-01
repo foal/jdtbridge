@@ -1,31 +1,31 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   formatSection, guideSection, reposFromServer,
-  buildDirtyMap, ago, cliCmd, SECTION_NAMES,
+  buildDirtyMap, ago, cliCmd, SECTION_NAMES, JSON_COMMANDS,
 } from "../src/commands/status.mjs";
 
 // ---- formatSection ----
 
 describe("formatSection", () => {
-  const s = { title: "Errors", cmd: "jdt errors", body: "(no errors)" };
+  const s = { title: "Errors", cmd: "jdt errors --json", body: "[]" };
 
   it("single section: body only, no header, no fence, no command", () => {
     const out = formatSection(s, true);
-    expect(out).toBe("(no errors)");
+    expect(out).toBe("[]");
   });
 
   it("multiple sections: has ## header", () => {
     const out = formatSection(s, false);
     expect(out).toContain("## Errors");
     expect(out).toContain("```bash");
-    expect(out).toContain("$ jdt errors");
+    expect(out).toContain("$ jdt errors --json");
   });
 
   it("multiple sections: code fence wraps body", () => {
     const out = formatSection(s, false);
     expect(out).toContain("```bash");
-    expect(out).toContain("$ jdt errors");
-    expect(out).toContain("(no errors)");
+    expect(out).toContain("$ jdt errors --json");
+    expect(out).toContain("[]");
     expect(out).toMatch(/```$/);
   });
 
@@ -116,6 +116,25 @@ describe("SECTION_NAMES", () => {
 
   it("contains intro", () => {
     expect(SECTION_NAMES).toContain("intro");
+  });
+});
+
+// ---- JSON_COMMANDS ----
+
+describe("JSON_COMMANDS", () => {
+  const dataSections = SECTION_NAMES.filter((s) => s !== "intro" && s !== "guide");
+
+  it("covers all data sections", () => {
+    for (const name of dataSections) {
+      expect(JSON_COMMANDS[name]).toBeDefined();
+      expect(JSON_COMMANDS[name]).toContain("--json");
+    }
+  });
+
+  it("each command starts with jdt", () => {
+    for (const cmd of Object.values(JSON_COMMANDS)) {
+      expect(cmd).toMatch(/^jdt /);
+    }
   });
 });
 
