@@ -4,101 +4,186 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.util.List;
 import java.util.Map;
+
+import org.eclipse.debug.core.DebugPlugin;
+import org.eclipse.debug.core.ILaunch;
+import org.eclipse.jdt.internal.junit.JUnitCorePlugin;
+import org.eclipse.jdt.internal.junit.model.TestCaseElement;
+import org.eclipse.jdt.internal.junit.model.TestRunSession;
+import org.eclipse.jdt.junit.model.ITestCaseElement;
+import org.eclipse.jdt.junit.model.ITestElement;
+import org.eclipse.jdt.junit.model.ITestElement.FailureTrace;
+import org.eclipse.jdt.junit.model.ITestElementContainer;
+import org.eclipse.jdt.junit.model.ITestSuiteElement;
 
 class TestSessionHandler {
 
-    private final TestSessionTracker tracker;
-
-    TestSessionHandler(TestSessionTracker tracker) {
-        this.tracker = tracker;
+    static String testRunId(TestRunSession session) {
+        String configId = session.getTestRunName();
+        ILaunch launch = session.getLaunch();
+        if (launch == null) return configId;
+        String ts = launch.getAttribute(
+                DebugPlugin.ATTR_LAUNCH_TIMESTAMP);
+        if (ts == null) return configId;
+        return configId + ":" + ts;
     }
 
+    TestSessionHandler() {
+    }
+
+    @SuppressWarnings("restriction")
     String handleStatus(Map<String, String> params) {
-        String name = params.get("session");
-        if (name == null || name.isBlank()) {
+        String testRunId = params.get("testRunId");
+        if (testRunId == null || testRunId.isBlank()) {
             return HttpServer.jsonError(
-                    "Missing 'session' parameter");
+                    "Missing 'testRunId' parameter");
         }
-        var ts = tracker.get(name);
-        if (ts == null) {
+
+        TestRunSession session = findSession(testRunId);
+        if (session == null) {
             return HttpServer.jsonError(
-                    "Test session not found: " + name);
+                    "Test run not found: " + testRunId);
         }
 
         String filter = params.get("filter");
         var entries = new JsonArray();
-        for (String eventLine : ts.events) {
-            var parsed = JsonParser.parseString(eventLine)
-                    .getAsJsonObject();
-            String event = parsed.has("event")
-                    ? parsed.get("event").getAsString() : "";
-            if (!"case".equals(event)) continue;
-            String status = parsed.has("status")
-                    ? parsed.get("status").getAsString() : "";
+        collectEntries(session, entries, filter);
 
-            if ("ignored".equals(filter)) {
-                if (!"IGNORED".equals(status)) continue;
-            } else if ("all".equals(filter)) {
-                // show everything
-            } else {
-                if ("PASS".equals(status)
-                        || "IGNORED".equals(status)) continue;
-            }
+        String configId = session.getTestRunName();
 
-            double time = parsed.has("time")
-                    ? parsed.get("time").getAsDouble() : 0.0;
-            var f = new JsonObject();
-            f.addProperty("fqmn",
-                    parsed.has("fqmn")
-                            ? parsed.get("fqmn").getAsString()
-                            : "");
-            f.addProperty("status", status);
-            f.addProperty("time", time);
-            if (parsed.has("trace")
-                    && !parsed.get("trace").isJsonNull())
-                f.addProperty("trace",
-                        parsed.get("trace").getAsString());
-            if (parsed.has("expected")
-                    && !parsed.get("expected").isJsonNull())
-                f.addProperty("expected",
-                        parsed.get("expected").getAsString());
-            if (parsed.has("actual")
-                    && !parsed.get("actual").isJsonNull())
-                f.addProperty("actual",
-                        parsed.get("actual").getAsString());
-            entries.add(f);
-        }
+        String state;
+        if (session.isRunning()) state = "running";
+        else if (session.isStarting()) state = "starting";
+        else state = "finished";
+
+        int passed = session.getStartedCount()
+                - session.getFailureCount()
+                - session.getErrorCount()
+                - session.getAssumptionFailureCount();
 
         var result = new JsonObject();
-        result.addProperty("session", ts.name);
-        if (ts.label != null)
-            result.addProperty("label", ts.label);
-        if (ts.project != null)
-            result.addProperty("project", ts.project);
-        result.addProperty("state", ts.state);
-        result.addProperty("total", ts.total);
+        result.addProperty("configId", configId);
+        result.addProperty("testRunId", testRunId(session));
+
+        var launchedProject = session.getLaunchedProject();
+        if (launchedProject != null)
+            result.addProperty("project",
+                    launchedProject.getElementName());
+
+        result.addProperty("state", state);
+        result.addProperty("total", session.getTotalCount());
         result.addProperty("completed",
-                ts.completed.get());
-        result.addProperty("passed", ts.passed.get());
-        result.addProperty("failed", ts.failed.get());
-        result.addProperty("errors", ts.errors.get());
-        result.addProperty("ignored", ts.ignored.get());
+                session.getStartedCount());
+        result.addProperty("passed", passed);
+        result.addProperty("failed",
+                session.getFailureCount());
+        result.addProperty("errors",
+                session.getErrorCount());
+        result.addProperty("ignored",
+                session.getIgnoredCount());
+
+        double elapsed = session.getElapsedTimeInSeconds();
         result.addProperty("time",
-                Double.isNaN(ts.time) ? 0.0 : ts.time);
+                Double.isNaN(elapsed) ? 0.0 : elapsed);
         result.add("entries", entries);
         return result.toString();
     }
 
+    TestRunSession findSession(String testRunId) {
+        List<TestRunSession> sessions =
+                JUnitCorePlugin.getModel()
+                        .getTestRunSessions();
+        for (TestRunSession s : sessions) {
+            if (testRunId.equals(testRunId(s))
+                    || testRunId.equals(s.getTestRunName())) {
+                return s;
+            }
+        }
+        return null;
+    }
+
+    private void collectEntries(ITestElementContainer container,
+            JsonArray entries, String filter) {
+        try {
+            for (ITestElement child : container.getChildren()) {
+                if (child instanceof ITestCaseElement tc) {
+                    var testResult = tc.getTestResult(false);
+                    String status;
+                    if (testResult == ITestElement.Result.OK)
+                        status = "PASS";
+                    else if (testResult
+                            == ITestElement.Result.FAILURE)
+                        status = "FAIL";
+                    else if (testResult
+                            == ITestElement.Result.ERROR)
+                        status = "ERROR";
+                    else if (testResult
+                            == ITestElement.Result.IGNORED)
+                        status = "IGNORED";
+                    else status = "UNKNOWN";
+
+                    if ("ignored".equals(filter)
+                            && !"IGNORED".equals(status))
+                        continue;
+                    if (filter == null
+                            || "failures".equals(filter)) {
+                        if ("PASS".equals(status)
+                                || "IGNORED".equals(status))
+                            continue;
+                    }
+
+                    String fqmn = tc.getTestClassName()
+                            + "#" + tc.getTestMethodName();
+                    double time = tc.getElapsedTimeInSeconds();
+
+                    var entry = new JsonObject();
+                    entry.addProperty("fqmn", fqmn);
+                    entry.addProperty("status", status);
+                    entry.addProperty("time",
+                            Double.isNaN(time) ? 0.0 : time);
+
+                    if (testResult == ITestElement.Result.FAILURE
+                            || testResult == ITestElement.Result.ERROR) {
+                        FailureTrace ft = tc.getFailureTrace();
+                        if (ft != null) {
+                            if (ft.getTrace() != null)
+                                entry.addProperty("trace",
+                                        ft.getTrace());
+                            if (ft.getExpected() != null)
+                                entry.addProperty("expected",
+                                        ft.getExpected());
+                            if (ft.getActual() != null)
+                                entry.addProperty("actual",
+                                        ft.getActual());
+                        }
+                    }
+                    entries.add(entry);
+                } else if (child instanceof ITestElementContainer c) {
+                    collectEntries(c, entries, filter);
+                }
+            }
+        } catch (Exception e) {
+            // ignore — tree may be incomplete
+        }
+    }
+
+    @SuppressWarnings("restriction")
     String handleClear(Map<String, String> params) {
-        String name = params.get("session");
+        String testRunId = params.get("testRunId");
+        var model = JUnitCorePlugin.getModel();
         int removed = 0;
-        for (var ts : tracker.all()) {
-            if (!"finished".equals(ts.state)
-                    && !"stopped".equals(ts.state)) continue;
-            if (name != null && !name.isBlank()
-                    && !name.equals(ts.name)) continue;
-            tracker.remove(ts.name);
+        for (TestRunSession s
+                : model.getTestRunSessions()) {
+            if (s.isRunning() || s.isStarting()) continue;
+            if (testRunId != null
+                    && !testRunId.isBlank()) {
+                TestRunSession match =
+                        findSession(testRunId);
+                if (match != s) continue;
+            }
+            model.removeTestRunSession(s);
             removed++;
         }
         var result = new JsonObject();
@@ -106,25 +191,61 @@ class TestSessionHandler {
         return result.toString();
     }
 
+    @SuppressWarnings("restriction")
     String handleSessions(Map<String, String> params) {
+        List<TestRunSession> sessions =
+                JUnitCorePlugin.getModel()
+                        .getTestRunSessions();
         var arr = new JsonArray();
-        for (var ts : tracker.all()) {
+        for (TestRunSession s : sessions) {
             var obj = new JsonObject();
-            obj.addProperty("session", ts.name);
-            if (ts.label != null)
-                obj.addProperty("label", ts.label);
-            obj.addProperty("state", ts.state);
-            obj.addProperty("total", ts.total);
+            String configId = s.getTestRunName();
+            obj.addProperty("configId", configId);
+            obj.addProperty("testRunId", testRunId(s));
+
+            // LaunchId from ILaunch → PID
+            ILaunch launch = s.getLaunch();
+            if (launch != null) {
+                var procs = launch.getProcesses();
+                if (procs.length > 0) {
+                    String pid = procs[0].getAttribute(
+                            org.eclipse.debug.core.model
+                                    .IProcess.ATTR_PROCESS_ID);
+                    if (pid != null)
+                        obj.addProperty("launchId",
+                                configId + ":" + pid);
+                }
+            }
+
+            String state;
+            if (s.isRunning()) state = "running";
+            else if (s.isStarting()) state = "starting";
+            else state = "finished";
+            obj.addProperty("state", state);
+
+            obj.addProperty("total", s.getTotalCount());
             obj.addProperty("completed",
-                    ts.completed.get());
-            obj.addProperty("passed", ts.passed.get());
-            obj.addProperty("failed", ts.failed.get());
-            obj.addProperty("errors", ts.errors.get());
-            obj.addProperty("ignored", ts.ignored.get());
+                    s.getStartedCount());
+            obj.addProperty("passed",
+                    s.getStartedCount()
+                            - s.getFailureCount()
+                            - s.getErrorCount()
+                            - s.getAssumptionFailureCount());
+            obj.addProperty("failed", s.getFailureCount());
+            obj.addProperty("errors", s.getErrorCount());
+            obj.addProperty("ignored",
+                    s.getIgnoredCount());
+
+            double elapsed = s.getElapsedTimeInSeconds();
             obj.addProperty("time",
-                    Double.isNaN(ts.time)
-                            ? 0.0 : ts.time);
-            obj.addProperty("startedAt", ts.startedAt);
+                    Double.isNaN(elapsed) ? 0.0 : elapsed);
+            if (launch != null) {
+                String ts = launch.getAttribute(
+                        DebugPlugin.ATTR_LAUNCH_TIMESTAMP);
+                if (ts != null)
+                    obj.addProperty("startedAt",
+                            Long.parseLong(ts));
+            }
             arr.add(obj);
         }
         return arr.toString();

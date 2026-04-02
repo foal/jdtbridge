@@ -74,7 +74,7 @@ describe("guideSection", () => {
     expect(g.body).toContain("jdt editors");
     expect(g.body).toContain("jdt errors");
     expect(g.body).toContain("jdt launch list");
-    expect(g.body).toContain("jdt test sessions");
+    expect(g.body).toContain("jdt test runs");
     expect(g.body).toContain("jdt projects");
   });
 
@@ -110,8 +110,9 @@ describe("SECTION_NAMES", () => {
     expect(SECTION_NAMES).toContain("guide");
   });
 
-  it("has 8 sections", () => {
-    expect(SECTION_NAMES.length).toBe(8);
+  it("has 9 sections", () => {
+    expect(SECTION_NAMES.length).toBe(9);
+    expect(SECTION_NAMES).toContain("launch-configs");
   });
 
   it("contains intro", () => {

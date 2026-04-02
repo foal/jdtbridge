@@ -8,8 +8,11 @@ import java.util.jar.Manifest;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.CoreException;
 import org.eclipse.debug.core.DebugPlugin;
+import org.eclipse.jdt.internal.junit.JUnitCorePlugin;
 import org.eclipse.debug.core.ILaunch;
+import org.eclipse.debug.core.ILaunchConfiguration;
 import org.eclipse.debug.core.ILaunchConfigurationType;
 import org.eclipse.debug.core.ILaunchConfigurationWorkingCopy;
 import org.eclipse.debug.core.ILaunchManager;
@@ -31,10 +34,7 @@ import org.osgi.framework.Version;
  */
 class TestHandler {
 
-    private final TestSessionTracker sessionTracker;
-
-    TestHandler(TestSessionTracker sessionTracker) {
-        this.sessionTracker = sessionTracker;
+    TestHandler() {
     }
 
     private static final String JUNIT_LAUNCH_TYPE =
@@ -86,7 +86,8 @@ class TestHandler {
     /** Prepared launch — shared between run modes. */
     private record PreparedLaunch(
             String configName,
-            ILaunchConfigurationWorkingCopy wc,
+            ILaunchConfiguration config,
+            boolean reused,
             String project,
             String runner) {}
 
@@ -121,28 +122,31 @@ class TestHandler {
             return null;
         }
 
+        // Stable name — no timestamp. Matches Eclipse GUI convention.
         String configName = launchPrefix(
-                fqn, packageName, projectName) + "-"
-                + System.currentTimeMillis();
+                fqn, packageName, projectName);
         ILaunchConfigurationWorkingCopy wc =
-                launchType.newInstance(null, configName);
+                launchType.newInstance(null,
+                        manager.generateLaunchConfigurationName(
+                                configName));
 
         if (PDE_JUNIT_LAUNCH_TYPE.equals(launchTypeId)) {
             // Headless: no workbench, no UI thread
             wc.setAttribute(PDE_RUN_IN_UI_THREAD, false);
             wc.setAttribute(PDE_APPLICATION, PDE_CORE_TEST_APP);
-            // Include all workspace + target bundles, auto-start
+            // Target platform bundles only — do not add workspace
+            // plugins automatically to avoid validation errors from
+            // non-OSGi projects (e.g. javax.persistence missing)
             wc.setAttribute(PDE_USE_DEFAULT, true);
-            wc.setAttribute(PDE_AUTOMATIC_ADD, true);
+            wc.setAttribute(PDE_AUTOMATIC_ADD, false);
             wc.setAttribute(PDE_DEFAULT_AUTO_START, true);
             wc.setAttribute(PDE_DEFAULT_START_LEVEL, 4);
-            wc.setAttribute(PDE_INCLUDE_OPTIONAL, true);
-            // Fresh temp workspace per run — avoids corrupt
-            // state from previous launches
+            wc.setAttribute(PDE_INCLUDE_OPTIONAL, false);
+            // Fresh temp workspace per run — clearws ensures
+            // clean state regardless of location path
             wc.setAttribute("location",
                     System.getProperty("java.io.tmpdir")
-                            + "/jdtbridge-test-ws-"
-                            + System.currentTimeMillis());
+                            + "/jdtbridge-test-ws");
             wc.setAttribute("askclear", false);
             wc.setAttribute("clearws", true);
         }
@@ -154,13 +158,27 @@ class TestHandler {
             return null;
         }
 
+        // Reuse existing config if one matches by attributes.
+        // Same algorithm as Eclipse JUnitLaunchShortcut.
+        boolean reused = false;
+        ILaunchConfiguration config;
+        ILaunchConfiguration existing =
+                findExistingConfig(wc, manager);
+        if (existing != null) {
+            config = existing;
+            configName = existing.getName();
+            reused = true;
+        } else {
+            config = wc.doSave();
+            configName = config.getName();
+        }
+
         // Resolve metadata
         String resolvedProject = null;
         String testKind = null;
         if (fqn != null && !fqn.isBlank()) {
             IType type = JdtUtils.findType(fqn);
             if (type != null) {
-                // Prefer explicit project over type's project
                 if (projectName != null
                         && !projectName.isBlank()) {
                     resolvedProject = projectName;
@@ -188,7 +206,7 @@ class TestHandler {
             }
         }
 
-        return new PreparedLaunch(configName, wc,
+        return new PreparedLaunch(configName, config, reused,
                 resolvedProject, formatRunner(testKind));
     }
 
@@ -202,31 +220,37 @@ class TestHandler {
         PreparedLaunch pl = prepareLaunch(params, errorOut);
         if (pl == null) return errorOut[0];
 
-        // Pre-register session so streaming clients can
-        // connect before sessionStarted fires
-        var ts = sessionTracker.preRegister(pl.configName());
-        ts.runner = pl.runner();
-
-        ILaunch launch = pl.wc().launch(
+        ILaunch launch = pl.config().launch(
                 ILaunchManager.RUN_MODE,
-                new NullProgressMonitor(), false);
+                new NullProgressMonitor(), true);
+
+        String configId = pl.configName();
+        String pid = null;
+        var processes = launch.getProcesses();
+        if (processes.length > 0) {
+            pid = processes[0].getAttribute(
+                    org.eclipse.debug.core.model.IProcess
+                            .ATTR_PROCESS_ID);
+        }
+
+        String launchTimestamp = launch.getAttribute(
+                DebugPlugin.ATTR_LAUNCH_TIMESTAMP);
+
+        String launchId = pid != null
+                ? configId + ":" + pid : configId;
+        String testRunId = configId + ":"
+                + launchTimestamp;
 
         var response = new JsonObject();
         response.addProperty("ok", true);
-        response.addProperty("session", pl.configName());
-        if (pl.project() != null)
-            response.addProperty("project", pl.project());
-        if (pl.runner() != null)
-            response.addProperty("runner", pl.runner());
-
-        var processes = launch.getProcesses();
-        if (processes.length > 0) {
-            String pid = processes[0].getAttribute(
-                    org.eclipse.debug.core.model.IProcess
-                            .ATTR_PROCESS_ID);
-            if (pid != null)
-                response.addProperty("pid", pid);
-        }
+        response.addProperty("configId", configId);
+        response.addProperty("launchId", launchId);
+        response.addProperty("testRunId", testRunId);
+        response.addProperty("reused", pl.reused());
+        response.addProperty("project", pl.project());
+        response.addProperty("runner", pl.runner());
+        if (pid != null)
+            response.addProperty("pid", pid);
 
         return response.toString();
     }
@@ -536,6 +560,44 @@ class TestHandler {
             }
         }
         return null;
+    }
+
+    /**
+     * Find an existing launch configuration with the same key
+     * attributes as the working copy. Port of Eclipse's
+     * JUnitLaunchShortcut#findExistingLaunchConfigurations.
+     */
+    private static ILaunchConfiguration findExistingConfig(
+            ILaunchConfigurationWorkingCopy wc,
+            ILaunchManager manager) throws CoreException {
+        String[] keys = {
+            IJavaLaunchConfigurationConstants.ATTR_PROJECT_NAME,
+            ATTR_TEST_CONTAINER,
+            IJavaLaunchConfigurationConstants
+                    .ATTR_MAIN_TYPE_NAME,
+            ATTR_TEST_NAME,
+        };
+        for (ILaunchConfiguration config
+                : manager.getLaunchConfigurations(wc.getType())) {
+            if (hasSameAttributes(config, wc, keys))
+                return config;
+        }
+        return null;
+    }
+
+    private static boolean hasSameAttributes(
+            ILaunchConfiguration a, ILaunchConfiguration b,
+            String[] keys) {
+        try {
+            for (String key : keys) {
+                String va = a.getAttribute(key, "");
+                String vb = b.getAttribute(key, "");
+                if (!va.equals(vb)) return false;
+            }
+            return true;
+        } catch (CoreException e) {
+            return false;
+        }
     }
 
     static String launchPrefix(String fqn, String packageName,

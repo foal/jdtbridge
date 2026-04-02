@@ -15,7 +15,7 @@ export function formatTestStatus(result) {
       ? " (stopped)"
       : "";
 
-  const label = result.label || result.session;
+  const label = result.label || result.configId;
   const progress = result.state === "running"
     ? `${result.completed}/${result.total}`
     : `${result.total}/${result.total}`;
@@ -138,12 +138,15 @@ function formatTime(t) {
  * Markdown-friendly: heading + backtick-wrapped values.
  */
 export function formatTestRunHeader(result) {
-  const label = result.label || result.session;
+  const label = result.label || result.configId;
   const total = result.total ? ` (${result.total} tests)` : "";
   const parts = [`#### Test: ${label}${total}`];
-  parts.push(`Launch: \`${result.session}\``);
-  if (result.project) parts.push(`Project: \`${result.project}\``);
-  if (result.runner) parts.push(`Runner: ${result.runner}`);
+  parts.push(`TestRunId: \`${result.testRunId}\``);
+  parts.push(`LaunchId:  \`${result.launchId}\``);
+  parts.push(`ConfigId:  \`${result.configId}\``);
+  parts.push(`Config:    ${result.reused ? "reused" : "created"}`);
+  if (result.project) parts.push(`Project:   \`${result.project}\``);
+  if (result.runner) parts.push(`Runner:    ${result.runner}`);
   return parts.join("\n");
 }
 
@@ -151,25 +154,26 @@ export function formatTestRunHeader(result) {
  * Onboarding guide printed after non-blocking launch.
  * Markdown-friendly: bold sections, backtick commands.
  */
-export function testRunGuide(session) {
+export function testRunGuide(testRunId, launchId) {
   return `
-**Status** — snapshot or live stream:
-  \`jdt test status ${session}\`        failures only (default)
-  \`jdt test status ${session} -f\`     stream live until done
-  \`jdt test status ${session} --all\`  all tests including passed
-  \`jdt test status ${session} --ignored\`  only skipped/disabled tests
+**Test status** (testRunId = ${testRunId}):
+  \`jdt test status ${testRunId}\`            failures only (default)
+  \`jdt test status ${testRunId} -f\`         stream live until done
+  \`jdt test status ${testRunId} --all\`      all tests including passed
+  \`jdt test status ${testRunId} --ignored\`  only skipped/disabled tests
 
-**Console** — raw stdout/stderr of the test JVM:
-  \`jdt launch logs ${session}\`
+**Console output** (launchId = ${launchId}):
+  \`jdt launch logs ${launchId}\`
+  \`jdt launch logs ${launchId} --tail 50\`
 
 **Manage:**
-  \`jdt test sessions\`                 list active/completed sessions
-  \`jdt launch stop ${session}\`   abort
-  \`jdt launch clear ${session}\`  remove
+  \`jdt test runs\`                          list test runs
+  \`jdt launch stop ${launchId}\`            abort
+  \`jdt launch clear ${launchId}\`           remove
 
 **Navigate** — FQMNs from status output are copy-pasteable:
-  \`jdt source <FQMN>\`                 view test source
-  \`jdt test run <FQMN> -f\`            re-run single test
+  \`jdt source <FQMN>\`                     view test source
+  \`jdt test run <FQMN> -f\`                re-run single test
 
 Add \`-q\` to suppress this guide.`;
 }
@@ -179,7 +183,7 @@ Add \`-q\` to suppress this guide.`;
  * Shared by test-run -f and test-status -f.
  * Returns exit code: 0 if all pass, 1 if any failures.
  */
-export async function followTestStream(session, args) {
+export async function followTestStream(testRunId, args) {
   const { getStreamLines } = await import("../client.mjs");
   const jsonFlag = args.includes("--json");
 
@@ -187,7 +191,7 @@ export async function followTestStream(session, args) {
   if (args.includes("--all")) filter = "all";
   else if (args.includes("--ignored")) filter = "ignored";
 
-  const url = `/test/status/stream?session=${encodeURIComponent(session)}&filter=${filter}`;
+  const url = `/test/status/stream?testRunId=${encodeURIComponent(testRunId)}&filter=${filter}`;
 
   let detached = false;
   const onSigint = () => {

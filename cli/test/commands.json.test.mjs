@@ -317,23 +317,23 @@ describe("--json output", () => {
     expect(data).toEqual([]);
   });
 
-  it("test sessions --json outputs valid JSON", async () => {
+  it("test runs --json outputs valid JSON", async () => {
     await setupMock((req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify([
-        { session: "test-123", label: "MyTest", total: 5, passed: 4, failed: 1, time: 2.5, state: "finished" },
+        { configId: "MyTest", testRunId: "MyTest:1775000", total: 5, passed: 4, failed: 1, time: 2.5, state: "finished" },
       ]));
     });
     const { testSessions } = await import("../src/commands/test-sessions.mjs");
     await testSessions(["--json"]);
     const data = parseJsonOutput(io.logs);
     expect(data).toBeInstanceOf(Array);
-    expect(data[0].session).toBe("test-123");
+    expect(data[0].configId).toBe("MyTest");
     expect(data[0].total).toBe(5);
     expect(data[0].passed).toBe(4);
   });
 
-  it("test sessions --json returns [] for no sessions", async () => {
+  it("test runs --json returns [] for no runs", async () => {
     await setupMock((req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end("[]");
@@ -419,9 +419,9 @@ describe("--json output", () => {
     await setupMock((req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify([
-        { name: "my-server", type: "Java Application", project: "m8-server", mainClass: "app.m8.Main" },
-        { name: "jdtbridge-verify", type: "Maven Build", goals: "clean verify" },
-        { name: "AllTests", type: "JUnit", project: "m8-server", class: "app.m8.AllTests", runner: "JUnit 5" },
+        { configId: "my-server", type: "Java Application", project: "my-project", mainClass: "com.example.Main" },
+        { configId: "jdtbridge-verify", type: "Maven Build", goals: "clean verify" },
+        { configId: "AllTests", type: "JUnit", project: "my-project", class: "com.example.AllTests", runner: "JUnit 5" },
       ]));
     });
     const { launchConfigs } = await import("../src/commands/launch.mjs");
@@ -429,8 +429,8 @@ describe("--json output", () => {
     const data = parseJsonOutput(io.logs);
     expect(data).toBeInstanceOf(Array);
     expect(data).toHaveLength(3);
-    expect(data[0].project).toBe("m8-server");
-    expect(data[0].mainClass).toBe("app.m8.Main");
+    expect(data[0].project).toBe("my-project");
+    expect(data[0].mainClass).toBe("com.example.Main");
     expect(data[1].goals).toBe("clean verify");
     expect(data[2].runner).toBe("JUnit 5");
   });

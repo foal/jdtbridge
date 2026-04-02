@@ -89,17 +89,20 @@ const launchSubcommands = {
   console: { fn: launchConsole, help: launchConsoleHelp },
 };
 
-const launchHelp = `Manage launches (running and terminated processes).
+const launchHelp = `Manage launch configurations and running processes.
 
 Subcommands:
-  jdt launch list                           list all launches
-  jdt launch configs                        list saved launch configurations
-  jdt launch config <name> [--xml]          show configuration details
-  jdt launch run <config> [-f] [-q]         launch a configuration
-  jdt launch debug <config> [-f] [-q]       launch in debug mode
-  jdt launch logs <name> [-f] [--tail N]    show console output
-  jdt launch stop <name>                    stop a running launch
-  jdt launch clear [name]                   remove terminated launches
+  jdt launch configs                              list saved configurations
+  jdt launch config <configId> [--xml] [--json]   show configuration details
+  jdt launch run <configId> [-f] [-q]             launch a configuration
+  jdt launch debug <configId> [-f] [-q]           launch in debug mode
+  jdt launch list                                 list running/terminated launches
+  jdt launch logs <launchId> [-f] [--tail N]      show console output
+  jdt launch stop <launchId>                      stop a running launch
+  jdt launch clear [launchId]                     remove terminated launches
+
+LaunchId is configId:pid (e.g. my-server:12345) for disambiguation.
+Plain configId works when there is only one launch with that name.
 
 Use "jdt help launch <subcommand>" for details.`;
 
@@ -121,15 +124,15 @@ async function launchDispatch(args) {
 const testSubcommands = {
   run: { fn: testRun, help: testRunHelp },
   status: { fn: testStatus, help: testStatusHelp },
-  sessions: { fn: testSessions, help: testSessionsHelp },
+  runs: { fn: testSessions, help: testSessionsHelp },
 };
 
 const testHelp = `Run and monitor JUnit tests via Eclipse's built-in runner.
 
 Subcommands:
-  jdt test run <FQN> [-f] [-q]                launch tests (non-blocking)
-  jdt test status <session> [-f] [--all]      show test progress/results
-  jdt test sessions                           list test sessions
+  jdt test run <FQN> [-f] [-q]                    launch tests (non-blocking)
+  jdt test status <testRunId> [-f] [--all]         show test progress/results
+  jdt test runs                                    list test runs
 
 Use "jdt help test <subcommand>" for details.`;
 
@@ -275,8 +278,8 @@ Search & navigation:
 Testing & building:
   build${fmtAliases("build")} [--project <name>] [--clean]      build project (incremental or clean)
   test run <FQN> [-f] [-q]                    launch tests (non-blocking)
-  test status <session> [-f] [--all]          show test progress/results
-  test sessions                               list test sessions
+  test status <testRunId> [-f] [--all]        show test progress/results
+  test runs                                   list test runs
 
 Diagnostics:
   errors${fmtAliases("errors")} [--file <path>] [--project <name>]   compilation errors
@@ -292,13 +295,14 @@ Refactoring:
   move <FQN> <target.package>                 move type to another package
 
 Launches:
-  launch list                                 list launches (running + terminated)
   launch configs                              list saved launch configurations
-  launch run <config> [-f] [-q]               launch a configuration
-  launch debug <config> [-f] [-q]             launch in debug mode
-  launch logs <name> [-f] [--tail N]          show console output
-  launch stop <name>                          stop a running launch
-  launch clear [name]                         remove terminated launches
+  launch config <configId> [--xml] [--json]   show configuration details
+  launch run <configId> [-f] [-q]             launch a configuration
+  launch debug <configId> [-f] [-q]           launch in debug mode
+  launch list                                 list launches (running + terminated)
+  launch logs <launchId> [-f] [--tail N]      show console output
+  launch stop <launchId>                      stop a running launch
+  launch clear [launchId]                     remove terminated launches
 
 Editor:
   open <FQMN>                                 open in Eclipse editor

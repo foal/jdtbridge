@@ -46,12 +46,15 @@ export async function testRun(args) {
     return;
   }
 
-  // Wait briefly for session to register total count
-  const session = result.session;
+  const configId = result.configId;
+  const launchId = result.launchId;
+  const testRunId = result.testRunId;
+
+  // Wait briefly for test run to register total count
   await sleep(500);
   try {
     const status = await get(
-      `/test/status?session=${encodeURIComponent(session)}`,
+      `/test/status?testRunId=${encodeURIComponent(testRunId)}`,
       5_000,
     );
     if (status && !status.error && status.total > 0) {
@@ -62,19 +65,22 @@ export async function testRun(args) {
     // ignore — total just won't be shown
   }
 
+  result.launchId = launchId;
+  result.testRunId = testRunId;
+
   const jsonFlag = args.includes("--json");
   if (!jsonFlag) console.log(formatTestRunHeader(result));
 
   const follow = args.includes("-f") || args.includes("--follow");
   if (follow) {
     if (!jsonFlag) console.log();
-    const exitCode = await followTestStream(session, args);
+    const exitCode = await followTestStream(testRunId, args);
     process.exit(exitCode);
   }
 
   const quiet = args.includes("-q") || args.includes("--quiet");
   if (!quiet) {
-    console.log(testRunGuide(session));
+    console.log(testRunGuide(testRunId, launchId));
   }
 }
 
@@ -109,8 +115,7 @@ Examples:
   jdt test run --project my-project -f                  run project tests + stream
   jdt test run com.example.MyTest -f --json             stream as JSONL
 
-The session ID printed after launch is also the launch name.
-Use it with other commands:
-  jdt test status <session> -f        test pass/fail details
-  jdt launch logs <session>           console output (stdout, stderr, stack traces)
-  jdt launch logs <session> --tail 50 last 50 lines of console`;
+The output shows testRunId (for test commands) and launchId (for launch commands):
+  jdt test status <testRunId> -f          test pass/fail details
+  jdt launch logs <launchId>              console output (stdout, stderr, stack traces)
+  jdt launch logs <launchId> --tail 50    last 50 lines of console`;

@@ -35,12 +35,10 @@ public class HttpServer {
     private final LaunchTracker launchTracker = new LaunchTracker();
     private final LaunchHandler launch =
             new LaunchHandler(launchTracker);
-    private final TestSessionTracker testSessionTracker =
-            new TestSessionTracker();
     private final TestSessionHandler testSessionHandler =
-            new TestSessionHandler(testSessionTracker);
+            new TestSessionHandler();
     private final TestHandler testHandler =
-            new TestHandler(testSessionTracker);
+            new TestHandler();
     private final ProjectHandler projectInfo = new ProjectHandler();
     private final RequestTracker requestTracker = new RequestTracker();
     private final ConfigService configService =
@@ -75,7 +73,6 @@ public class HttpServer {
 
     public void start() throws IOException {
         launchTracker.start();
-        testSessionTracker.start();
         serverSocket = new ServerSocket(
                 0, 50, InetAddress.getLoopbackAddress());
         running = true;
@@ -97,7 +94,6 @@ public class HttpServer {
 
     public void stop() {
         launchTracker.stop();
-        testSessionTracker.stop();
         running = false;
         try {
             if (serverSocket != null) serverSocket.close();
@@ -248,9 +244,9 @@ public class HttpServer {
      */
     private void handleConsoleStream(Socket socket,
             Map<String, String> params) {
-        String name = params.get("name");
+        String name = params.get("launchId");
         if (name == null || name.isBlank()) {
-            try { sendError(socket, 400, "Missing name"); }
+            try { sendError(socket, 400, "Missing launchId"); }
             catch (IOException e) { /* ignore */ }
             return;
         }
@@ -294,19 +290,30 @@ public class HttpServer {
      */
     private void handleTestStatusStream(Socket socket,
             Map<String, String> params) {
-        String session = params.get("session");
-        if (session == null || session.isBlank()) {
-            try { sendError(socket, 400, "Missing session"); }
+        String testRunId = params.get("testRunId");
+        if (testRunId == null || testRunId.isBlank()) {
+            try { sendError(socket, 400, "Missing testRunId"); }
             catch (IOException e) { /* ignore */ }
             return;
         }
 
-        TestSessionTracker.TrackedTestSession ts =
-                testSessionTracker.await(session);
-        if (ts == null) {
+        var session = testSessionHandler.findSession(testRunId);
+        if (session == null) {
+            // Session may not exist yet — wait briefly
+            for (int i = 0; i < 20 && session == null; i++) {
+                try { Thread.sleep(500); }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                session = testSessionHandler.findSession(
+                        testRunId);
+            }
+        }
+        if (session == null) {
             try {
                 sendError(socket, 404,
-                        "Test session not found: " + session);
+                        "Test run not found: " + testRunId);
             } catch (IOException e) { /* ignore */ }
             return;
         }
@@ -323,7 +330,7 @@ public class HttpServer {
                     + "Cache-Control: no-cache\r\n\r\n")
                     .getBytes(StandardCharsets.UTF_8));
 
-            TestProgressStreamer.stream(ts, out, filter);
+            TestProgressStreamer.stream(session, out, filter);
         } catch (IOException
                 | TestProgressStreamer.StreamClosedException e) {
             // Client disconnected — normal for Ctrl+C
@@ -442,6 +449,8 @@ public class HttpServer {
                         launch.handleConfigs(params));
                 case "/launch/config" -> Response.json(
                         launch.handleConfig(params));
+                case "/launch/config/delete" -> Response.json(
+                        launch.handleConfigDelete(params));
                 case "/launch/clear" -> Response.json(
                         launch.handleClear(params));
                 case "/launch/console" -> Response.json(
