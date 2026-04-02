@@ -1,6 +1,6 @@
 {
   "name": "@kaluchi/jdtbridge",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "CLI for Eclipse JDT Bridge — semantic Java analysis via Eclipse JDT SearchEngine",
   "type": "module",
   "bin": {
