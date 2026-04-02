@@ -79,7 +79,10 @@ public class WelcomeStartupHandler implements IStartup {
 				"io.github.kaluchi.jdtbridge");
 		if (bundle == null)
 			return org.osgi.framework.Version.emptyVersion;
-		return bundle.getVersion();
+		var v = bundle.getVersion();
+		// Strip qualifier — compare only major.minor.micro
+		return new org.osgi.framework.Version(
+				v.getMajor(), v.getMinor(), v.getMicro());
 	}
 
 	private org.osgi.framework.Version parseCliVersion(
