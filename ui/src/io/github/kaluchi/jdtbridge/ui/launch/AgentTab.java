@@ -31,6 +31,7 @@ public class AgentTab extends AbstractLaunchConfigurationTab {
 	private Combo providerCombo;
 	private Text agentText;
 	private Text workingDirText;
+	private Button projectScopeCheckbox;
 	private Text argsText;
 
 	@Override
@@ -86,6 +87,18 @@ public class AgentTab extends AbstractLaunchConfigurationTab {
 		variablesBtn.setText("Variables...");
 		variablesBtn.addListener(SWT.Selection,
 				e -> browseVariables(workingDirText));
+
+		// Project scope checkbox
+		new Label(comp, SWT.NONE); // spacer
+		projectScopeCheckbox = new Button(comp, SWT.CHECK);
+		projectScopeCheckbox.setText(
+				"Limit project scope to working directory");
+		projectScopeCheckbox.setLayoutData(new GridData(
+				SWT.FILL, SWT.CENTER, true, false));
+		projectScopeCheckbox.addListener(SWT.Selection, e -> {
+			setDirty(true);
+			updateLaunchConfigurationDialog();
+		});
 
 		// Arguments group
 		Group argsGroup = new Group(comp, SWT.NONE);
@@ -174,10 +187,15 @@ public class AgentTab extends AbstractLaunchConfigurationTab {
 	@Override
 	public void setDefaults(
 			ILaunchConfigurationWorkingCopy config) {
-		config.setAttribute(AgentLaunchDelegate.ATTR_PROVIDER, "local");
-		config.setAttribute(AgentLaunchDelegate.ATTR_AGENT, "claude");
+		config.setAttribute(AgentLaunchDelegate.ATTR_PROVIDER,
+				"local");
+		config.setAttribute(AgentLaunchDelegate.ATTR_AGENT,
+				"claude");
 		config.setAttribute(AgentLaunchDelegate.ATTR_WORKING_DIR, "");
+		config.setAttribute(AgentLaunchDelegate.ATTR_PROJECT_SCOPE,
+				true);
 		config.setAttribute(AgentLaunchDelegate.ATTR_AGENT_ARGS, "");
+		config.rename("");
 	}
 
 	@Override
@@ -192,6 +210,10 @@ public class AgentTab extends AbstractLaunchConfigurationTab {
 			workingDirText.setText(
 					config.getAttribute(
 							AgentLaunchDelegate.ATTR_WORKING_DIR, ""));
+			projectScopeCheckbox.setSelection(
+					config.getAttribute(
+							AgentLaunchDelegate.ATTR_PROJECT_SCOPE,
+							true));
 			argsText.setText(
 					config.getAttribute(
 							AgentLaunchDelegate.ATTR_AGENT_ARGS, ""));
@@ -209,6 +231,8 @@ public class AgentTab extends AbstractLaunchConfigurationTab {
 				agentText.getText().trim());
 		config.setAttribute(AgentLaunchDelegate.ATTR_WORKING_DIR,
 				workingDirText.getText().trim());
+		config.setAttribute(AgentLaunchDelegate.ATTR_PROJECT_SCOPE,
+				projectScopeCheckbox.getSelection());
 		config.setAttribute(AgentLaunchDelegate.ATTR_AGENT_ARGS,
 				argsText.getText().trim());
 	}
