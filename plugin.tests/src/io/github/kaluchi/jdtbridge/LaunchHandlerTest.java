@@ -83,8 +83,8 @@ public class LaunchHandlerTest {
             if (!json.equals("[]")) {
                 assertTrue(json.contains("\"mode\""),
                         "Should have mode: " + json);
-                assertTrue(json.contains("\"type\""),
-                        "Should have type: " + json);
+                assertTrue(json.contains("\"configType\""),
+                        "Should have configType: " + json);
             }
         }
     }
@@ -156,8 +156,8 @@ public class LaunchHandlerTest {
             if (!json.equals("[]")) {
                 assertTrue(json.contains("\"configId\""),
                         "Should have configId: " + json);
-                assertTrue(json.contains("\"type\""),
-                        "Should have type: " + json);
+                assertTrue(json.contains("\"configType\""),
+                        "Should have configType: " + json);
             }
         }
 
@@ -168,7 +168,7 @@ public class LaunchHandlerTest {
                     .getAsJsonArray();
             for (var el : arr) {
                 var obj = el.getAsJsonObject();
-                String type = obj.get("type").getAsString();
+                String type = obj.get("configType").getAsString();
                 if ("JUnit".equals(type)
                         || "JUnit Plug-in Test".equals(type)) {
                     assertTrue(obj.has("class")
@@ -188,7 +188,7 @@ public class LaunchHandlerTest {
                     .getAsJsonArray();
             for (var el : arr) {
                 var obj = el.getAsJsonObject();
-                String type = obj.get("type").getAsString();
+                String type = obj.get("configType").getAsString();
                 if ("Maven Build".equals(type)) {
                     assertTrue(obj.has("goals"),
                             "Maven config should have goals: "
@@ -239,10 +239,10 @@ public class LaunchHandlerTest {
             var obj = JsonParser.parseString(json)
                     .getAsJsonObject();
             assertEquals(configId, obj.get("configId").getAsString());
-            assertTrue(obj.has("type"),
-                    "Should have type: " + json);
-            assertTrue(obj.has("typeId"),
-                    "Should have typeId: " + json);
+            assertTrue(obj.has("configType"),
+                    "Should have configType: " + json);
+            assertTrue(obj.has("configTypeId"),
+                    "Should have configTypeId: " + json);
             assertTrue(obj.has("attributes"),
                     "Should have attributes: " + json);
             assertTrue(obj.get("attributes").isJsonObject(),
@@ -284,7 +284,7 @@ public class LaunchHandlerTest {
             String configId = null;
             for (var el : arr) {
                 var obj = el.getAsJsonObject();
-                String type = obj.get("type").getAsString();
+                String type = obj.get("configType").getAsString();
                 if ("JUnit".equals(type)
                         || "JUnit Plug-in Test".equals(type)) {
                     configId = obj.get("configId").getAsString();
