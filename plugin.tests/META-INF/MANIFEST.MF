@@ -3,7 +3,7 @@ Bundle-ManifestVersion: 2
 Bundle-Name: JDT Bridge Tests
 Bundle-Vendor: kaluchi
 Bundle-SymbolicName: io.github.kaluchi.jdtbridge.tests
-Bundle-Version: 2.4.0.qualifier
+Bundle-Version: 2.5.0.qualifier
 Fragment-Host: io.github.kaluchi.jdtbridge
 Bundle-RequiredExecutionEnvironment: JavaSE-21
 Require-Bundle: junit-jupiter-api;bundle-version="5.14",
