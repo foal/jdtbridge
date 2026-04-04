@@ -73,18 +73,60 @@ public class HttpServer {
     }
 
     public void start() throws IOException {
+        start(InetAddress.getLoopbackAddress(), 0);
+    }
+
+    public void start(InetAddress bindAddress, int port)
+            throws IOException {
         launchTracker.start();
-        serverSocket = new ServerSocket(
-                0, 50, InetAddress.getLoopbackAddress());
+        serverSocket = bindWithFallback(bindAddress, port);
         running = true;
-        Thread t = new Thread(this::acceptLoop, "jdtbridge-http");
-        t.setDaemon(true);
-        t.start();
+        startAcceptLoop(serverSocket);
+    }
+
+    /**
+     * Rebind to a new address/port without restarting Eclipse.
+     * In-flight requests on the old socket complete normally.
+     */
+    public void rebind(InetAddress bindAddress, int port)
+            throws IOException {
+        ServerSocket oldSocket = serverSocket;
+        serverSocket = bindWithFallback(bindAddress, port);
+        startAcceptLoop(serverSocket);
+        if (oldSocket != null) {
+            try { oldSocket.close(); } catch (IOException ignored) { }
+        }
+    }
+
+    private void startAcceptLoop(ServerSocket listenSocket) {
+        Thread acceptThread = new Thread(
+                () -> acceptLoop(listenSocket), "jdtbridge-http");
+        acceptThread.setDaemon(true);
+        acceptThread.start();
     }
 
     /** Returns the actual port the server is listening on. */
     public int getPort() {
         return serverSocket != null ? serverSocket.getLocalPort() : -1;
+    }
+
+    /** Returns the bind address, or null if not started. */
+    public InetAddress getBindAddress() {
+        return serverSocket != null
+                ? serverSocket.getInetAddress() : null;
+    }
+
+    private static ServerSocket bindWithFallback(
+            InetAddress bindAddress, int port) throws IOException {
+        try {
+            return new ServerSocket(port, 50, bindAddress);
+        } catch (IOException e) {
+            if (port != 0) {
+                Log.warn("Port " + port + " in use, auto-assigning");
+                return new ServerSocket(0, 50, bindAddress);
+            }
+            throw e;
+        }
     }
 
     public void setToken(String token) {
@@ -107,14 +149,14 @@ public class HttpServer {
         }
     }
 
-    private void acceptLoop() {
-        while (running) {
+    private void acceptLoop(ServerSocket listenSocket) {
+        while (running && !listenSocket.isClosed()) {
             try {
-                Socket socket = serverSocket.accept();
-                executor.submit(() -> handle(socket));
-            } catch (IOException e) {
-                if (running) {
-                    Log.error("Accept error", e);
+                Socket clientSocket = listenSocket.accept();
+                executor.submit(() -> handle(clientSocket));
+            } catch (IOException acceptException) {
+                if (running && !listenSocket.isClosed()) {
+                    Log.error("Accept error", acceptException);
                 }
             }
         }

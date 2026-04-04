@@ -14,6 +14,8 @@ import java.security.SecureRandom;
 import java.util.Set;
 
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.preferences.IEclipsePreferences;
+import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
 
@@ -25,6 +27,9 @@ public class Activator implements BundleActivator {
 
     private HttpServer server;
     private Path bridgeFile;
+    private String currentToken;
+    private BundleContext bundleContext;
+    private volatile boolean rebindScheduled;
 
     @Override
     public void start(BundleContext context) throws Exception {
@@ -43,18 +48,26 @@ public class Activator implements BundleActivator {
             return;
         }
 
-        String token = generateToken();
+        bundleContext = context;
+        currentToken = generateToken();
+
+        var bindAddress = ServerPreferences.resolveBindAddress();
+        int configuredPort = ServerPreferences.resolveFixedPort();
 
         server = new HttpServer();
-        server.setToken(token);
-        server.start();
+        server.setToken(currentToken);
+        server.start(bindAddress, configuredPort);
 
-        int port = server.getPort();
         String version = context.getBundle().getVersion().toString();
         String location = context.getBundle().getLocation();
-        writeBridgeFile(port, token, version, location);
+        writeBridgeFile(server.getPort(), currentToken,
+                version, location);
 
-        Log.info("HTTP server started on port " + port);
+        Log.info("HTTP server started on "
+                + bindAddress.getHostAddress() + ":"
+                + server.getPort());
+
+        registerPreferenceListener();
     }
 
     @Override
@@ -92,6 +105,66 @@ public class Activator implements BundleActivator {
         Files.writeString(bridgeFile, content);
         setPosixOwnerOnly(bridgeFile);
         setPosixOwnerOnly(instancesDir);
+    }
+
+    private void registerPreferenceListener() {
+        try {
+            IEclipsePreferences prefNode = InstanceScope.INSTANCE
+                    .getNode(ServerPreferences.PREFERENCE_NODE);
+            prefNode.addPreferenceChangeListener(
+                    preferenceChange -> {
+                String changedKey = preferenceChange.getKey();
+                if (ServerPreferences.HTTP_BIND_ADDRESS
+                        .equals(changedKey)
+                        || ServerPreferences.HTTP_FIXED_PORT
+                                .equals(changedKey)) {
+                    scheduleRebind();
+                }
+            });
+        } catch (Exception preferenceListenerException) {
+            Log.warn("Failed to register preference listener",
+                    preferenceListenerException);
+        }
+    }
+
+    /**
+     * Coalesce multiple preference changes (address + port written
+     * sequentially) into a single rebind. Runs off UI thread.
+     */
+    private void scheduleRebind() {
+        if (rebindScheduled) return;
+        rebindScheduled = true;
+        new Thread(() -> {
+            try {
+                Thread.sleep(100); // coalesce rapid changes
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            rebindScheduled = false;
+            performRebind();
+        }, "jdtbridge-rebind").start();
+    }
+
+    private void performRebind() {
+        if (server == null) return;
+        try {
+            var bindAddress = ServerPreferences.resolveBindAddress();
+            int fixedPort = ServerPreferences.resolveFixedPort();
+            server.rebind(bindAddress, fixedPort);
+
+            String version = bundleContext.getBundle()
+                    .getVersion().toString();
+            String location = bundleContext.getBundle().getLocation();
+            writeBridgeFile(server.getPort(), currentToken,
+                    version, location);
+
+            Log.info("Server rebound to "
+                    + bindAddress.getHostAddress() + ":"
+                    + server.getPort());
+        } catch (IOException rebindException) {
+            Log.error("Failed to rebind server", rebindException);
+        }
     }
 
     private static Path resolveHome() {
@@ -139,7 +212,7 @@ public class Activator implements BundleActivator {
         }
     }
 
-    static Path getHome() {
+    public static Path getHome() {
         return resolveHome();
     }
 
