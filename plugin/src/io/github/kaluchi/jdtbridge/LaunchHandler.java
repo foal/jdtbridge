@@ -207,6 +207,69 @@ class LaunchHandler {
         }
     }
 
+    String handleImport(Map<String, String> params,
+            String launchXmlContent) {
+        String configId = params.get("configId");
+        if (configId == null || configId.isBlank()) {
+            return HttpServer.jsonError(
+                    "Missing 'configId' parameter");
+        }
+        if (launchXmlContent == null || launchXmlContent.isBlank()) {
+            return HttpServer.jsonError(
+                    "Missing launch configuration XML in request body");
+        }
+        // Reject path separators in configId (prevent path traversal)
+        if (configId.contains("/") || configId.contains("\\")
+                || configId.contains("..")) {
+            return HttpServer.jsonError(
+                    "Invalid configId: must not contain "
+                    + "path separators or '..'");
+        }
+        // Check if configId already exists (API cache + file on disk)
+        if (findConfig(configId) != null
+                || launchFileExists(configId)) {
+            return HttpServer.jsonError(
+                    "Launch configuration \"" + configId
+                    + "\" already exists. "
+                    + "Use --configid to import with a different name.");
+        }
+        java.nio.file.Path tempDir = null;
+        java.nio.file.Path tempLaunchFile = null;
+        try {
+            tempDir = Files.createTempDirectory("jdtbridge-import");
+            tempLaunchFile = tempDir.resolve(
+                    configId + ".launch");
+            Files.writeString(tempLaunchFile, launchXmlContent);
+
+            // Eclipse's built-in import API — handles file copy,
+            // LaunchManager registration, and change notification
+            var launchManager =
+                    (org.eclipse.debug.internal.core.LaunchManager)
+                    DebugPlugin.getDefault().getLaunchManager();
+            launchManager.importConfigurations(
+                    new java.io.File[] { tempLaunchFile.toFile() },
+                    null);
+
+            var importResult = new JsonObject();
+            importResult.addProperty("configId", configId);
+            importResult.addProperty("imported", true);
+            return importResult.toString();
+        } catch (Exception importException) {
+            return HttpServer.jsonError(
+                    "Import failed: " + importException.getMessage());
+        } finally {
+            try {
+                if (tempLaunchFile != null)
+                    Files.deleteIfExists(tempLaunchFile);
+                if (tempDir != null)
+                    Files.deleteIfExists(tempDir);
+            } catch (IOException cleanupException) {
+                Log.warn("Failed to clean temp import files",
+                        cleanupException);
+            }
+        }
+    }
+
     String handleConfigDelete(Map<String, String> params) {
         String configId = params.get("configId");
         if (configId == null || configId.isBlank()) {
@@ -552,6 +615,19 @@ class LaunchHandler {
             }
         } catch (Exception e) { /* ignored */ }
         return null;
+    }
+
+    /** Check .launch file exists on disk (handles LaunchManager cache lag). */
+    private boolean launchFileExists(String configId) {
+        try {
+            java.nio.file.Path launchFile = DebugPlugin.getDefault()
+                    .getStateLocation().toPath()
+                    .resolve(".launches")
+                    .resolve(configId + ".launch");
+            return Files.exists(launchFile);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     String handleConsole(Map<String, String> params) {
