@@ -20,6 +20,16 @@ import org.junit.jupiter.api.Test;
  */
 public class LaunchImportTest {
 
+    private static final String JUNIT_LAUNCH_XML =
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <launchConfiguration type="org.eclipse.jdt.junit.launchconfig">
+                <stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="com.example.Test"/>
+                <stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="test"/>
+                <stringAttribute key="org.eclipse.jdt.junit.TEST_KIND" value="org.eclipse.jdt.junit.loader.junit5"/>
+            </launchConfiguration>
+            """;
+
     private static final String MAVEN_LAUNCH_XML =
             """
             <?xml version="1.0" encoding="UTF-8" standalone="no"?>
@@ -155,6 +165,34 @@ public class LaunchImportTest {
             String responseJson = launchHandler.handleImport(
                     Map.of("configId", configId), MAVEN_LAUNCH_XML);
             assertTrue(responseJson.contains("already exists"));
+        }
+    }
+
+    @Nested
+    class Delete {
+        @Test
+        void deleteSucceedsForMetadataConfig() throws Exception {
+            String configId = "test-delete-ok-"
+                    + System.currentTimeMillis();
+            importedConfigId = configId;
+
+            String importJson = launchHandler.handleImport(
+                    Map.of("configId", configId), JUNIT_LAUNCH_XML);
+            assertTrue(importJson.contains("\"imported\":true"),
+                    "Import should succeed: " + importJson);
+
+            String deleteJson = launchHandler.handleConfigDelete(
+                    Map.of("configId", configId));
+            assertTrue(deleteJson.contains("\"ok\":true"),
+                    "Delete should succeed: " + deleteJson);
+            importedConfigId = null;
+        }
+
+        @Test
+        void deleteRejectsNotFound() {
+            String responseJson = launchHandler.handleConfigDelete(
+                    Map.of("configId", "nonexistent-config-xyz"));
+            assertTrue(responseJson.contains("not found"));
         }
     }
 }
