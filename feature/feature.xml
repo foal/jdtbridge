@@ -2,7 +2,7 @@
 <feature
       id="io.github.kaluchi.jdtbridge.feature"
       label="%feature.label"
-      version="2.5.0.qualifier"
+      version="2.6.0.qualifier"
       provider-name="%feature.provider_name"
       plugin="io.github.kaluchi.jdtbridge.branding"
       image="feature.png">
