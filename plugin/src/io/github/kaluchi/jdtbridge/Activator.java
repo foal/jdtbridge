@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,11 +26,16 @@ public class Activator implements BundleActivator {
     private static final String INSTANCES_DIR = "instances";
     private static final int TOKEN_BYTES = 16;
 
-    private HttpServer server;
-    private Path bridgeFile;
-    private String currentToken;
+    private static Activator instance;
+
+    private HttpServer localServer;
+    private HttpServer remoteServer;
+    private Path localBridgeFile;
+    private String localToken;
+    private String remoteToken;
     private BundleContext bundleContext;
-    private volatile boolean rebindScheduled;
+    private final java.util.concurrent.atomic.AtomicBoolean
+            rebindScheduled = new java.util.concurrent.atomic.AtomicBoolean();
 
     @Override
     public void start(BundleContext context) throws Exception {
@@ -48,40 +54,85 @@ public class Activator implements BundleActivator {
             return;
         }
 
+        instance = this;
         bundleContext = context;
-        currentToken = generateToken();
-
-        var bindAddress = ServerPreferences.resolveBindAddress();
-        int configuredPort = ServerPreferences.resolveFixedPort();
-
-        server = new HttpServer();
-        server.setToken(currentToken);
-        server.start(bindAddress, configuredPort);
-
         String version = context.getBundle().getVersion().toString();
         String location = context.getBundle().getLocation();
-        writeBridgeFile(server.getPort(), currentToken,
-                version, location);
 
-        Log.info("HTTP server started on "
-                + bindAddress.getHostAddress() + ":"
-                + server.getPort());
+        // Local socket — always on loopback
+        localToken = resolveLocalToken();
+        int localPort = ServerPreferences.resolveLocalPort();
+        localServer = new HttpServer();
+        localServer.setToken(localToken);
+        localServer.start(InetAddress.getLoopbackAddress(), localPort);
+        Log.info("Local server on 127.0.0.1:"
+                + localServer.getPort());
+
+        // Remote socket — optional
+        if (ServerPreferences.resolveRemoteEnabled()) {
+            startRemoteServer(version, location);
+        }
+
+        localBridgeFile = writeBridgeFile(version, location);
 
         registerPreferenceListener();
     }
 
+    private void startRemoteServer(String version, String location)
+            throws IOException {
+        remoteToken = resolveRemoteToken();
+        int remotePort = ServerPreferences.resolveRemotePort();
+        remoteServer = new HttpServer();
+        remoteServer.setToken(remoteToken);
+        remoteServer.start(InetAddress.getByName("0.0.0.0"),
+                remotePort);
+        Log.info("Remote server on 0.0.0.0:"
+                + remoteServer.getPort());
+    }
+
+    private void stopRemoteServer() {
+        if (remoteServer != null) {
+            remoteServer.stop();
+            remoteServer = null;
+        }
+    }
+
+    private String resolveLocalToken() {
+        if (ServerPreferences.resolveLocalRegenerateToken()) {
+            return generateToken();
+        }
+        String persisted = ServerPreferences.resolveLocalToken();
+        return persisted.isEmpty() ? generateToken() : persisted;
+    }
+
+    private String resolveRemoteToken() {
+        if (ServerPreferences.resolveRemoteRegenerateToken()) {
+            return generateToken();
+        }
+        String persisted = ServerPreferences.resolveRemoteToken();
+        return persisted.isEmpty() ? generateToken() : persisted;
+    }
+
     @Override
     public void stop(BundleContext context) throws Exception {
-        if (server != null) {
-            server.stop();
-            server = null;
+        if (localServer != null) {
+            localServer.stop();
+            localServer = null;
         }
-        deleteBridgeFile();
+        stopRemoteServer();
+        if (localBridgeFile != null) {
+            try { Files.deleteIfExists(localBridgeFile); }
+            catch (IOException deleteException) {
+                Log.warn("Failed to delete local bridge file",
+                        deleteException);
+            }
+        }
+        instance = null;
         Log.info("HTTP server stopped");
     }
 
-    private void writeBridgeFile(int port, String token,
-            String version, String location) throws IOException {
+    private Path writeBridgeFile(String version, String location)
+            throws IOException {
         String workspace = ResourcesPlugin.getWorkspace().getRoot()
                 .getLocation().toOSString();
         long pid = ProcessHandle.current().pid();
@@ -91,20 +142,26 @@ public class Activator implements BundleActivator {
         Files.createDirectories(instancesDir);
 
         String hash = workspaceHash(workspace);
-        bridgeFile = instancesDir.resolve(hash + ".json");
+        Path bridgeFilePath = instancesDir.resolve(hash + ".json");
 
         var obj = new JsonObject();
-        obj.addProperty("port", port);
-        obj.addProperty("token", token);
+        obj.addProperty("port", localServer.getPort());
+        obj.addProperty("token", localToken);
+        obj.addProperty("host", "127.0.0.1");
+        if (remoteServer != null) {
+            obj.addProperty("remotePort", remoteServer.getPort());
+            obj.addProperty("remoteToken", remoteToken);
+        }
         obj.addProperty("pid", pid);
         obj.addProperty("workspace", workspace);
         obj.addProperty("version", version);
         obj.addProperty("location", location);
         String content = obj.toString() + "\n";
 
-        Files.writeString(bridgeFile, content);
-        setPosixOwnerOnly(bridgeFile);
+        Files.writeString(bridgeFilePath, content);
+        setPosixOwnerOnly(bridgeFilePath);
         setPosixOwnerOnly(instancesDir);
+        return bridgeFilePath;
     }
 
     private void registerPreferenceListener() {
@@ -112,58 +169,84 @@ public class Activator implements BundleActivator {
             IEclipsePreferences prefNode = InstanceScope.INSTANCE
                     .getNode(ServerPreferences.PREFERENCE_NODE);
             prefNode.addPreferenceChangeListener(
-                    preferenceChange -> {
-                String changedKey = preferenceChange.getKey();
-                if (ServerPreferences.HTTP_BIND_ADDRESS
-                        .equals(changedKey)
-                        || ServerPreferences.HTTP_FIXED_PORT
-                                .equals(changedKey)) {
-                    scheduleRebind();
-                }
-            });
+                    preferenceChange -> scheduleRebind());
         } catch (Exception preferenceListenerException) {
             Log.warn("Failed to register preference listener",
                     preferenceListenerException);
         }
     }
 
-    /**
-     * Coalesce multiple preference changes (address + port written
-     * sequentially) into a single rebind. Runs off UI thread.
-     */
     private void scheduleRebind() {
-        if (rebindScheduled) return;
-        rebindScheduled = true;
+        if (!rebindScheduled.compareAndSet(false, true)) return;
         new Thread(() -> {
             try {
-                Thread.sleep(100); // coalesce rapid changes
+                Thread.sleep(100);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 return;
             }
-            rebindScheduled = false;
+            rebindScheduled.set(false);
             performRebind();
         }, "jdtbridge-rebind").start();
     }
 
     private void performRebind() {
-        if (server == null) return;
+        String version = bundleContext.getBundle()
+                .getVersion().toString();
+        String location = bundleContext.getBundle().getLocation();
+
+        // Local rebind
+        if (localServer != null) {
+            try {
+                localToken = resolveLocalToken();
+                int localPort = ServerPreferences.resolveLocalPort();
+                localServer.setToken(localToken);
+                localServer.rebind(
+                        InetAddress.getLoopbackAddress(), localPort);
+                Log.info("Local server rebound to 127.0.0.1:"
+                        + localServer.getPort());
+            } catch (IOException localRebindException) {
+                Log.error("Failed to rebind local server",
+                        localRebindException);
+            }
+        }
+
+        // Remote toggle
+        boolean remoteEnabled =
+                ServerPreferences.resolveRemoteEnabled();
+        if (remoteEnabled && remoteServer == null) {
+            try {
+                startRemoteServer(version, location);
+            } catch (IOException remoteStartException) {
+                Log.error("Failed to start remote server",
+                        remoteStartException);
+            }
+        } else if (!remoteEnabled && remoteServer != null) {
+            stopRemoteServer();
+            Log.info("Remote server stopped");
+        } else if (remoteEnabled && remoteServer != null) {
+            try {
+                remoteToken = resolveRemoteToken();
+                int remotePort =
+                        ServerPreferences.resolveRemotePort();
+                remoteServer.setToken(remoteToken);
+                remoteServer.rebind(
+                        InetAddress.getByName("0.0.0.0"),
+                        remotePort);
+                Log.info("Remote server rebound to 0.0.0.0:"
+                        + remoteServer.getPort());
+            } catch (IOException remoteRebindException) {
+                Log.error("Failed to rebind remote server",
+                        remoteRebindException);
+            }
+        }
+
+        // Rewrite bridge file with current state (both sockets)
         try {
-            var bindAddress = ServerPreferences.resolveBindAddress();
-            int fixedPort = ServerPreferences.resolveFixedPort();
-            server.rebind(bindAddress, fixedPort);
-
-            String version = bundleContext.getBundle()
-                    .getVersion().toString();
-            String location = bundleContext.getBundle().getLocation();
-            writeBridgeFile(server.getPort(), currentToken,
-                    version, location);
-
-            Log.info("Server rebound to "
-                    + bindAddress.getHostAddress() + ":"
-                    + server.getPort());
-        } catch (IOException rebindException) {
-            Log.error("Failed to rebind server", rebindException);
+            localBridgeFile = writeBridgeFile(version, location);
+        } catch (IOException bridgeFileException) {
+            Log.error("Failed to write bridge file",
+                    bridgeFileException);
         }
     }
 
@@ -202,14 +285,28 @@ public class Activator implements BundleActivator {
         }
     }
 
-    private void deleteBridgeFile() {
-        if (bridgeFile != null) {
-            try {
-                Files.deleteIfExists(bridgeFile);
-            } catch (IOException e) {
-                Log.warn("Failed to delete bridge file", e);
-            }
-        }
+    public static Activator getInstance() {
+        return instance;
+    }
+
+    public int getLocalPort() {
+        return localServer != null ? localServer.getPort() : -1;
+    }
+
+    public String getLocalToken() {
+        return localToken;
+    }
+
+    public int getRemotePort() {
+        return remoteServer != null ? remoteServer.getPort() : -1;
+    }
+
+    public String getRemoteToken() {
+        return remoteToken;
+    }
+
+    public boolean isRemoteRunning() {
+        return remoteServer != null;
     }
 
     public static Path getHome() {

@@ -51,17 +51,26 @@ instances and auto-adds new ones to `workspaces.json`.
 
 ```
 $ jdt use
-#  ALIAS  WORKSPACE                           STATUS   PINNED  VERSION  PORT
-1  jdt    D:\eclipse-workspace-jdtbridge      online   pinned  2.4.0    58800
-2  web    D:\eclipse-workspace-webapp         online           2.4.0    59100
-3         C:\Users\John\Projects\legacy       offline
-4         D:\eclipse-workspace-experiment     *new*            2.4.0    58801
+#  ALIAS  WORKSPACE                        STATUS  PINNED  HOST       PORT   PLUGIN
+1  jdt    D:\eclipse-workspace-jdtbridge   online  pinned  127.0.0.1  7777   2.5.0
+2  web    D:\eclipse-workspace-webapp      online          127.0.0.1  59100  2.5.0
+3         C:\Users\John\Projects\legacy    offline
 
 Pin this terminal:  jdt use <N|alias|path>
 ```
 
-The `PINNED` column shows which workspace is pinned in the current
-terminal. Determined from ppid pin or terminal ID pin.
+Columns:
+
+| Column | Description |
+|---|---|
+| `#` | Registry number (position in `workspaces.json`) |
+| `ALIAS` | User-defined short name for quick switching |
+| `WORKSPACE` | Workspace path as seen by the CLI host |
+| `STATUS` | Connection status (see below) |
+| `PINNED` | Shows `pinned` for the active workspace in this terminal |
+| `HOST` | Server bind address |
+| `PORT` | Server port |
+| `PLUGIN` | Plugin version on the Eclipse instance |
 
 Status values:
 
@@ -69,6 +78,7 @@ Status values:
 |---|---|
 | `online` | Instance running, port reachable |
 | `offline` | In registry but no running instance |
+| `remote` | Remote instance (no probe, no PID check) |
 | `*new*` | First time seen, just added to registry |
 
 After display, `*new*` entries become regular (status will show as
@@ -94,6 +104,7 @@ Pinned to: D:\eclipse-workspace-webapp (web, port 59100)
 ```
 
 Fails if workspace is offline (no running instance to connect to).
+Remote instances always allow pinning (no liveness check).
 
 Numbers are stable across Eclipse restarts but shift when entries
 are deleted via `--delete`. Aliases and workspace paths never shift.
@@ -132,6 +143,39 @@ TYPE      ID                    WORKSPACE                       STATUS  PINNED A
 ppid      42512                 D:\eclipse-workspace-jdtbridge  stale   2026-04-04T02:49:02Z
 terminal  0679187d-a3ea-4c9...  D:\eclipse-workspace-jdtbridge  active  2026-04-04T02:49:02Z
 ```
+
+### Remote instances
+
+`jdt use` must be fast — no network probes. It reads instance
+files and checks local PID liveness only.
+
+For remote instances (from `~/.jdtbridge/remote-instances/`):
+- STATUS = `remote` (no probe, no PID to check)
+- To verify connection: `jdt setup remote --check`
+- Switching works the same: `jdt use <N>` or `jdt use <alias>`
+
+See [jdt-setup-remote-spec.md](jdt-setup-remote-spec.md) for
+remote setup and `--check`.
+
+Example inside a Linux container connected to a remote Eclipse:
+
+```
+$ jdt use
+#  ALIAS  WORKSPACE   STATUS  PINNED  HOST                    PORT   PLUGIN
+1         /workspace  remote  pinned  host.docker.internal    7777   2.5.0
+```
+
+Multiple remote Eclipse instances:
+
+```
+$ jdt use
+#  ALIAS  WORKSPACE        STATUS   PINNED  HOST                    PORT   PLUGIN
+1  dev    /mnt/dev         remote   pinned  host.docker.internal    7777   2.5.0
+2  stage  /mnt/staging     remote           192.168.1.100           8888   2.4.0
+3  prod   /mnt/production  remote           10.0.0.5                9999
+```
+
+Switching works the same as local: `jdt use 2` or `jdt use stage`.
 
 ### `jdt use --json`
 
@@ -372,8 +416,9 @@ Case-insensitive, backslash-normalized. No symlink resolution.
 On every `jdt use` (list) invocation:
 
 1. Read `workspaces.json` (or create empty)
-2. Scan `~/.jdtbridge/instances/*.json` for running instances
-3. For each running instance: match `workspace` against registry
+2. Scan `~/.jdtbridge/instances/*.json` for local instances
+   and `~/.jdtbridge/remote-instances/*.json` for remote instances
+3. For each instance: match `workspace` against registry
 4. Unmatched instances → append to registry, mark `*new*`
 5. Registry entries without running instance → `offline`
 6. Save updated `workspaces.json`
@@ -452,11 +497,12 @@ CLI:
   terminal-id.mjs            — resolveTerminalId()
   resolve.mjs                — connection resolution (env → ppid pin → term pin → discovery)
   home.mjs                   — workspaces.json read/write, pins directory management
-  bridge-env.mjs             — getPinnedBridge() (existing, unchanged)
-  discovery.mjs              — discoverInstances() (existing, unchanged)
+  bridge-env.mjs             — getPinnedBridge()
+  discovery.mjs              — discoverInstances() reads local + remote-instances
 
 Data:
   ~/.jdtbridge/use/workspaces.json         — workspace list with aliases
   ~/.jdtbridge/use/pins/term-<id>.json     — per terminal tab pin
   ~/.jdtbridge/use/pins/ppid-<pid>.json    — per process pin
-  ~/.jdtbridge/instances/                  — running instance files (existing)
+  ~/.jdtbridge/instances/                  — local instance files
+  ~/.jdtbridge/remote-instances/           — remote instance files
