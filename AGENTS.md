@@ -287,6 +287,12 @@ node scripts/release.mjs 1.4.0 --bump   # bump versions only
 Requires: clean working tree, master branch, tag must not exist.
 CI deploys automatically: npm publish, p2 site, GitHub Release.
 
+After CI creates the GitHub Release, replace the auto-generated body
+with human-written release notes. Show the draft to the user for
+approval before publishing. Use `gh release edit vX.Y.Z --notes "..."`.
+See previous releases for style (feature paragraphs, not bullet lists
+of commits).
+
 ## Conventions
 
 - Java: Eclipse formatter (`jdt format <file>`)

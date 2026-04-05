@@ -145,12 +145,16 @@ public class HttpServerBindTest {
                 assertTrue(socket.isConnected());
             }
 
-            // Old port should refuse connections
+            // Old port should refuse connections (retry — OS may
+            // not have released the port immediately after close)
             boolean refused = false;
-            try (Socket socket = new Socket("127.0.0.1", oldPort)) {
-                // might connect to something else reusing the port
-            } catch (Exception e) {
-                refused = true;
+            for (int attempt = 0; attempt < 10; attempt++) {
+                try (Socket socket = new Socket("127.0.0.1", oldPort)) {
+                    Thread.sleep(50);
+                } catch (Exception e) {
+                    refused = true;
+                    break;
+                }
             }
             assertTrue(refused,
                     "Old port should refuse connections after rebind");
